@@ -160,19 +160,25 @@
             btn.textContent = 'Creating...';
             
             try {
-                await Auth.register(
+                const data = await Auth.register(
                     document.getElementById('reg-name').value,
                     document.getElementById('reg-email').value,
                     document.getElementById('reg-password').value,
                     document.getElementById('reg-phone').value,
                     document.getElementById('reg-address').value
                 );
-                UI.showToast('Registration successful! Please login.', 'success');
-                switchMode('login');
-                // Auto-fill email
-                document.getElementById('login-email').value = document.getElementById('reg-email').value;
-                document.querySelectorAll('.mode-btn')[0].classList.add('active'); // active login btn
-            } catch (err) {
+                
+                if (data && data.status === 'success') {
+                    UI.showToast('Registration successful! Please login.', 'success');
+                    switchMode('login');
+                    document.getElementById('login-email').value = document.getElementById('reg-email').value;
+                    document.querySelectorAll('.mode-btn')[0].classList.add('active');
+                } else {
+                    btn.textContent = originalText;
+                    UI.showToast(data.message || 'Registration failed.', 'error');
+                }
+            }
+ catch (err) {
                 btn.textContent = originalText;
             }
         }

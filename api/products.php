@@ -14,7 +14,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
     if ($id) {
-        $query = "SELECT id, name, category, price, description, image FROM products WHERE id = ? LIMIT 0,1";
+        $query = "SELECT id, name, category, price, description, image_url FROM products WHERE id = ? LIMIT 0,1";
         $stmt = $db->prepare($query);
         $stmt->bindParam(1, $id);
         $stmt->execute();
@@ -29,7 +29,7 @@ if ($method === 'GET') {
             echo json_encode(["status" => "error", "message" => "Product not found."]);
         }
     } else {
-        $query = "SELECT id, name, category, price, description, image FROM products";
+        $query = "SELECT id, name, category, price, description, image_url FROM products";
         $stmt = $db->prepare($query);
         $stmt->execute();
         

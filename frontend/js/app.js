@@ -49,7 +49,7 @@ async function loadProducts() {
             
             catalog.innerHTML = res.data.map((p, i) => `
                 <div class="product-card animate-fade" style="animation-delay: ${0.1 * i}s">
-                    <img src="${p.image && p.image !== 'null' ? (p.image.startsWith('http') ? p.image : '..' + p.image) : 'https://images.unsplash.com/photo-1596944924616-7b38e7cfac36?auto=format&fit=crop&q=80&w=600'}" class="product-image" alt="${p.name}">
+                    <img src="${p.image_url && p.image_url !== 'null' ? (p.image_url.startsWith('http') ? p.image_url : '..' + p.image_url) : 'https://images.unsplash.com/photo-1596944924616-7b38e7cfac36?auto=format&fit=crop&q=80&w=600'}" class="product-image" alt="${p.name}">
                     <div class="product-info">
                         <div class="product-category">${p.category || 'Jewellery'}</div>
                         <h3 class="product-title">${p.name}</h3>
@@ -58,6 +58,7 @@ async function loadProducts() {
                     </div>
                 </div>
             `).join('');
+
         }
     } catch (err) {
         catalog.innerHTML = `<h3 style="color:var(--danger); grid-column: 1/-1; text-align: center; padding: 4rem;">Failed to load catalog server. Please ensure the backend is running.</h3>`;

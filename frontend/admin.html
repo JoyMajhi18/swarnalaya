@@ -32,6 +32,31 @@
         th, td { text-align: left; padding: 1.2rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
         th { color: var(--text-muted); font-weight: 500; text-transform: uppercase; font-size: 0.85rem;}
         .badge { padding: 0.3rem 0.6rem; border-radius: 4px; font-size: 0.8rem; background: rgba(212,175,55,0.2); color: var(--primary); white-space: nowrap;}
+        
+        /* Admin Product Grid */
+        .admin-product-grid { 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 1.5rem; 
+            margin-top: 2rem;
+        }
+        @media (max-width: 1200px) { .admin-product-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) { .admin-product-grid { grid-template-columns: 1fr; } }
+        
+        .admin-product-card { 
+            background: rgba(0,0,0,0.3); 
+            border: 1px solid rgba(255,255,255,0.05); 
+            border-radius: 8px; 
+            padding: 1rem;
+            transition: all 0.2s;
+        }
+        .admin-product-card img { width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 0.8rem; }
+        .admin-product-card h4 { font-size: 0.95rem; margin-bottom: 0.3rem; }
+        .admin-product-card .price { color: var(--primary); font-weight: bold; margin-bottom: 1rem; font-size: 1.1rem; }
+        .admin-actions { display: flex; gap: 0.5rem; }
+        .admin-actions button { flex: 1; padding: 0.5rem; font-size: 0.75rem; cursor: pointer; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: var(--text-muted); transition: all 0.2s; }
+        .admin-actions .btn-delete:hover { background: var(--danger); color: white; border-color: var(--danger); }
+        .admin-actions .btn-edit:hover { background: var(--primary); color: black; border-color: var(--primary); }
     </style>
 </head>
 <body>
@@ -93,11 +118,24 @@
                     </div>
                 </div>
             </div>
+
+            <!-- New Catalog Management Panel -->
+            <div class="panel" style="margin-top: 2rem;">
+                <h2 class="panel-header">Active Storefront Catalog</h2>
+                <div class="admin-product-grid" id="admin-catalog">
+                    <!-- Injected via JS -->
+                    <div class="stat-card"><h3>Connecting to database...</h3></div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
+    <script>
+        Auth.requireAuth('admin');
+    </script>
     <script src="js/admin.js"></script>
+
 </body>
 </html>

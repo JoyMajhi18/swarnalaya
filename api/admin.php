@@ -60,7 +60,7 @@ if ($resource === 'dashboard') {
         $stats['total_orders'] = (int)$row['total_orders'];
         $stats['total_revenue'] = (float)$row['total_revenue'];
         
-        $stmt = $db->query("SELECT o.id, o.total_amount, o.order_date, p.payment_status FROM orders o LEFT JOIN payments p ON o.id = p.order_id ORDER BY o.order_date DESC LIMIT 5");
+        $stmt = $db->query("SELECT o.id, o.total_amount, o.created_at as order_date, p.payment_status FROM orders o LEFT JOIN payments p ON o.id = p.order_id ORDER BY o.created_at DESC LIMIT 5");
         $stats['recent_orders'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         http_response_code(200);
@@ -81,7 +81,7 @@ if ($resource === 'dashboard') {
         }
 
         if (!empty($name) && !empty($price)) {
-            $query = "INSERT INTO products (name, category, price, description, image) VALUES (?, ?, ?, ?, ?)";
+            $query = "INSERT INTO products (name, category, price, description, image_url) VALUES (?, ?, ?, ?, ?)";
             $stmt = $db->prepare($query);
             $stmt->execute([htmlspecialchars(strip_tags($name)), htmlspecialchars(strip_tags($category)), $price, htmlspecialchars(strip_tags($description)), $image]);
             http_response_code(201);
@@ -95,10 +95,10 @@ if ($resource === 'dashboard') {
         $data = json_decode(file_get_contents("php://input"), true);
         if ($data) {
             $updates = array();
-            $params = array();
             foreach ($data as $key => $value) {
                 if (in_array($key, ['name', 'category', 'description', 'price', 'image'])) {
-                    $updates[] = "{$key} = ?";
+                    $key_db = ($key === 'image') ? 'image_url' : $key;
+                    $updates[] = "{$key_db} = ?";
                     $params[] = $value;
                 }
             }
@@ -129,8 +129,8 @@ if ($resource === 'dashboard') {
 
 } elseif ($resource === 'orders') {
     if ($method === 'GET' && !$id) {
-        $query = "SELECT o.id as order_id, u.id as user_id, u.name as customer_name, o.order_date as date, p.payment_status, o.total_amount 
-                  FROM orders o JOIN users u ON o.user_id = u.id LEFT JOIN payments p ON o.id = p.order_id ORDER BY o.order_date DESC";
+        $query = "SELECT o.id as order_id, u.id as user_id, u.name as customer_name, o.created_at as date, p.payment_status, o.total_amount 
+                  FROM orders o JOIN users u ON o.user_id = u.id LEFT JOIN payments p ON o.id = p.order_id ORDER BY o.created_at DESC";
         $stmt = $db->prepare($query);
         $stmt->execute();
         $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);

@@ -28,9 +28,55 @@ async function loadDashboard() {
             `).join('');
             
             document.getElementById('recent-orders-list').innerHTML = ordersHtml || `<tr><td colspan="4" style="color:var(--text-muted)">No recent transactions recorded.</td></tr>`;
+            
+            // Load catalog items into the 4-column grid
+            loadCatalog();
         }
     } catch (err) {
         UI.showToast('Failed to sync dashboard intelligence loop.', 'error');
+    }
+}
+
+async function loadCatalog() {
+    const catalogContainer = document.getElementById('admin-catalog');
+    try {
+        const res = await API.request('/products');
+        if (res.status === 'success') {
+            const products = res.data;
+            if (products.length === 0) {
+                catalogContainer.innerHTML = '<p style="color:var(--text-muted); grid-column: 1/-1;">No products found in live catalog.</p>';
+                return;
+            }
+
+            catalogContainer.innerHTML = products.map(p => `
+                <div class="admin-product-card animate-fade">
+                    <img src="${p.image_url || 'https://via.placeholder.com/300'}" alt="${p.name}">
+                    <h4>${p.name}</h4>
+                    <p style="color:var(--text-muted); font-size: 0.8rem; margin-bottom: 0.5rem;">${p.category || 'Uncategorized'}</p>
+                    <div class="price">$${p.price.toFixed(2)}</div>
+                    <div class="admin-actions">
+                        <button class="btn-edit" onclick="UI.showToast('Edit feature coming soon')">Edit</button>
+                        <button class="btn-delete" onclick="deleteProduct(${p.id})">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+    } catch (err) {
+        catalogContainer.innerHTML = '<p style="color:var(--danger); grid-column: 1/-1;">Critical failure during catalog retrieval.</p>';
+    }
+}
+
+async function deleteProduct(id) {
+    if (!confirm('Are you absolutely sure you want to purge this item from the live storefront? This action is irreversible.')) return;
+    
+    try {
+        const res = await API.request(`/admin/products/${id}`, { method: 'DELETE' });
+        if (res.status === 'success') {
+            UI.showToast('Product purged successfully.', 'success');
+            loadDashboard(); // Refresh stats and catalog
+        }
+    } catch (err) {
+        // Error toast handled by API helper
     }
 }
 

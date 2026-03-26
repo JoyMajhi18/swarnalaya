@@ -1,9 +1,9 @@
 <?php
 class Database {
     private $host = "127.0.0.1";
-    private $db_name = "jewellery_db";
+    private $db_name = "joy";
     private $username = "root";
-    private $password = "";
+    private $password = "admin123";
     public $conn;
 
     public function getConnection() {
@@ -13,6 +13,7 @@ class Database {
             $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $this->conn->exec("set names utf8");
         } catch(PDOException $exception) {
+            http_response_code(500);
             echo json_encode(["status" => "error", "message" => "Database connection error."]);
             exit();
         }

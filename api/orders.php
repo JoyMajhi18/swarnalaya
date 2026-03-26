@@ -96,7 +96,7 @@ if ($method === 'POST' && $action_or_id === 'checkout') {
 } elseif ($method === 'GET') {
     if ($action_or_id && is_numeric($action_or_id)) {
         $order_id = intval($action_or_id);
-        $order_query = "SELECT o.id as order_id, o.address, o.total_amount, o.order_date, p.payment_method, p.payment_status 
+        $order_query = "SELECT o.id as order_id, o.address, o.total_amount, o.created_at as order_date, p.payment_method, p.payment_status 
                         FROM orders o LEFT JOIN payments p ON o.id = p.order_id 
                         WHERE o.id = ? AND o.user_id = ?";
         $order_stmt = $db->prepare($order_query);
@@ -119,9 +119,9 @@ if ($method === 'POST' && $action_or_id === 'checkout') {
             echo json_encode(["status" => "error", "message" => "Order not found."]);
         }
     } else {
-        $order_query = "SELECT o.id as order_id, o.total_amount, o.order_date, p.payment_status 
+        $order_query = "SELECT o.id as order_id, o.total_amount, o.created_at as order_date, p.payment_status 
                         FROM orders o LEFT JOIN payments p ON o.id = p.order_id 
-                        WHERE o.user_id = ? ORDER BY o.order_date DESC";
+                        WHERE o.user_id = ? ORDER BY o.created_at DESC";
         $order_stmt = $db->prepare($order_query);
         $order_stmt->execute([$user_id]);
         
