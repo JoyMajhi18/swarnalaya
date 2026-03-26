@@ -1,0 +1,21 @@
+{
+    "name": "jewellery-shop/api",
+    "description": "Online Jewellery Management System API",
+    "type": "project",
+    "require": {
+        "php": ">=7.4"
+    },
+    "autoload": {
+        "classmap": [
+            "api/",
+            "config/",
+            "database/"
+        ]
+    },
+    "authors": [
+        {
+            "name": "Admin",
+            "email": "admin@example.com"
+        }
+    ]
+}

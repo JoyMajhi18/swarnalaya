@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase History - SWARNALAYA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .container { max-width: 900px; padding: 4rem 2rem; margin: 0 auto; }
+        .order-card { background: var(--bg-card); padding: 2.5rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 2rem; transition: transform 0.2s; }
+        .order-card:hover { border-color: rgba(212,175,55,0.2); transform: translateY(-3px); }
+        .status-badge { padding: 0.4rem 1rem; border-radius: 30px; font-size: 0.85rem; font-weight: bold; background: rgba(255,255,255,0.1); display: inline-block; }
+        .status-Paid { background: rgba(46, 213, 115, 0.2); color: #2ed573; box-shadow: 0 0 10px rgba(46, 213, 115, 0.2); }
+        .status-Pending { background: rgba(212, 175, 55, 0.2); color: var(--primary); box-shadow: 0 0 10px rgba(212, 175, 55, 0.2); }
+        
+        .order-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1.5rem;}
+        .order-meta p { color: var(--text-muted); margin-top: 0.3rem; font-size: 0.95rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="index.html" class="brand">SWARNALAYA.</a>
+        <div class="nav-links">
+            <a href="index.html">Catalog</a>
+            <a href="cart.html">Cart</a>
+            <a href="#" onclick="Auth.logout()">Logout</a>
+        </div>
+    </nav>
+    <div class="container animate-fade">
+        <h1 style="margin-bottom: 3rem; color: var(--text-main)">Order History</h1>
+        <div id="orders-list"><p style="color:var(--text-muted)">Gathering your purchase history...</p></div>
+    </div>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            Auth.requireAuth('user');
+            const list = document.getElementById('orders-list');
+            try {
+                const res = await API.request('/orders');
+                if(res.data.length === 0) return list.innerHTML = `<p style="color:var(--text-muted)">You haven't placed any orders yet.</p>`;
+                
+                list.innerHTML = res.data.map((o, i) => `
+                    <div class="order-card animate-fade" style="animation-delay: ${0.1 * i}s">
+                        <div class="order-header">
+                            <div class="order-meta">
+                                <h3>Order #${o.order_id}</h3>
+                                <p>Placed on ${new Date(o.order_date).toLocaleString()}</p>
+                            </div>
+                            <div style="text-align: right">
+                                <div class="status-badge status-${o.payment_status}">${o.payment_status || 'Unknown'}</div>
+                                <div style="font-size:1.6rem; font-weight:bold; color:var(--primary); margin-top:0.8rem;">$${o.total_amount.toFixed(2)}</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem" onclick="viewDetails(${o.order_id})">View Tracking & Details</button>
+                    </div>
+                `).join('');
+            } catch(err) {
+                list.innerHTML = `<p style="color:var(--danger)">Failed to load order history.</p>`;
+            }
+        });
+        
+        async function viewDetails(id) {
+            try {
+                const res = await API.request(`/orders/${id}`);
+                if (res.status === 'success') {
+                    const details = JSON.stringify(res.data, null, 2);
+                    alert('Order details:\n\n' + details);
+                } else {
+                    UI.showToast('Unable to retrieve order details', 'error');
+                }
+            } catch (err) {
+                UI.showToast('Failed to fetch order details', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

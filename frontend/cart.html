@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Cart - SWARNALAYA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .container { max-width: 1000px; padding: 4rem 2rem; margin: 0 auto; }
+        .cart-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+        @media (max-width: 768px) {
+            .cart-grid { grid-template-columns: 1fr; }
+        }
+        .cart-items {
+            background: var(--bg-card);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .cart-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .cart-item:last-child { border-bottom: none; }
+        .checkout-box {
+            background: rgba(212, 175, 55, 0.05);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid var(--primary);
+            height: fit-content;
+        }
+        .qty-controls { display: flex; gap: 1rem; align-items: center; }
+        .qty-btn {
+            background: var(--bg-dark); color: white; border: 1px solid rgba(255,255,255,0.1);
+            width: 30px; height: 30px; border-radius: 4px; cursor: pointer; transition: all 0.2s;
+        }
+        .qty-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .remove-btn { color: var(--danger); background: transparent; border: none; cursor: pointer; text-decoration: underline; margin-top:0.5rem; display:block; width:100%; text-align:right;}
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="index.html" class="brand">SWARNALAYA.</a>
+        <div class="nav-links">
+            <a href="index.html">Catalog</a>
+            <a href="orders.html">Purchases</a>
+            <a href="#" onclick="Auth.logout()">Logout</a>
+        </div>
+    </nav>
+    <div class="container animate-fade">
+        <h1 style="margin-bottom: 2rem; color: var(--primary)">Shopping Cart</h1>
+        <div class="cart-grid">
+            <div class="cart-items" id="cart-list">
+                <p style="color: var(--text-muted)">Loading cart...</p>
+            </div>
+            
+            <form class="checkout-box" id="checkout-form" onsubmit="handleCheckout(event)">
+                <h3 style="margin-bottom: 1.5rem">Order Summary</h3>
+                <div style="display:flex; justify-content:space-between; margin-bottom: 1rem;">
+                    <span>Subtotal</span>
+                    <strong id="subtotal" style="color: var(--primary)">$0.00</strong>
+                </div>
+                <hr style="border:none; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem;">
+                
+                <h4 style="margin-bottom: 1rem">Delivery Details</h4>
+                <textarea id="address" placeholder="Full Delivery Address" rows="3" required></textarea>
+                
+                <h4 style="margin-bottom: 1rem; margin-top: 1rem;">Payment Method</h4>
+                <select id="payment-method" required>
+                    <option value="Credit Card">Credit Card</option>
+                    <option value="PayPal">PayPal</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                </select>
+
+                <button type="submit" class="btn" style="margin-top: 2rem" id="checkout-btn">Complete Purchase</button>
+            </form>
+        </div>
+    </div>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/cart.js"></script>
+</body>
+</html>

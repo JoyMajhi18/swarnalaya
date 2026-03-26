@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication - SWARNALAYA Jewellery</title>
+    <!-- Use Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at 50% 0%, #1a1a1d, var(--bg-dark) 50%);
+        }
+        .auth-container {
+            background: rgba(20, 20, 23, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 3rem;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .auth-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .auth-header h1 {
+            color: var(--primary);
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        .auth-header p {
+            color: var(--text-muted);
+        }
+        .auth-modes {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 0.8rem;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-muted);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .mode-btn.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(212, 175, 55, 0.05);
+        }
+        .auth-form {
+            display: none;
+        }
+        .auth-form.active {
+            display: block;
+        }
+        .logo-home {
+            position: absolute;
+            top: 2rem;
+            left: 2rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <a href="index.html" class="logo-home">SWARNALAYA.</a>
+
+    <div class="auth-container animate-fade">
+        <div class="auth-header">
+            <h1>Welcome Back</h1>
+            <p>Enter your details to proceed.</p>
+        </div>
+
+        <div class="auth-modes">
+            <button class="mode-btn active" onclick="switchMode('login')">Login</button>
+            <button class="mode-btn" onclick="switchMode('register')">Register</button>
+            <button class="mode-btn" onclick="switchMode('admin')">Staff</button>
+        </div>
+
+        <!-- Customer Login -->
+        <form id="form-login" class="auth-form active" onsubmit="handleLogin(event, false)">
+            <input type="email" id="login-email" placeholder="Email Address" required>
+            <input type="password" id="login-password" placeholder="Password" required>
+            <button type="submit" class="btn">Sign In</button>
+        </form>
+
+        <!-- Customer Register -->
+        <form id="form-register" class="auth-form" onsubmit="handleRegister(event)">
+            <input type="text" id="reg-name" placeholder="Full Name" required>
+            <input type="email" id="reg-email" placeholder="Email Address" required>
+            <input type="password" id="reg-password" placeholder="Password" required>
+            <input type="tel" id="reg-phone" placeholder="Phone Number">
+            <textarea id="reg-address" placeholder="Delivery Address" rows="2"></textarea>
+            <button type="submit" class="btn">Create Account</button>
+        </form>
+
+        <!-- Admin Login -->
+        <form id="form-admin" class="auth-form" onsubmit="handleLogin(event, true)">
+            <input type="text" id="admin-username" placeholder="Admin Username" required>
+            <input type="password" id="admin-password" placeholder="Admin Password" required>
+            <button type="submit" class="btn">Access Dashboard</button>
+        </form>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        Auth.redirectIfAuthenticated();
+
+        function switchMode(mode) {
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            
+            document.getElementById(`form-${mode}`).classList.add('active');
+            event.target.classList.add('active');
+
+            const header = document.querySelector('.auth-header h1');
+            if(mode === 'login') header.textContent = 'Welcome Back';
+            if(mode === 'register') header.textContent = 'Join SWARNALAYA';
+            if(mode === 'admin') header.textContent = 'Staff Portal';
+        }
+
+        async function handleLogin(e, isAdmin) {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            const originalText = btn.textContent;
+            btn.textContent = 'Authenticating...';
+            
+            try {
+                if (isAdmin) {
+                    await Auth.login(document.getElementById('admin-username').value, document.getElementById('admin-password').value, true);
+                    window.location.href = 'index.html';
+                } else {
+                    await Auth.login(document.getElementById('login-email').value, document.getElementById('login-password').value, false);
+                    window.location.href = 'index.html';
+                }
+            } catch (err) {
+                btn.textContent = originalText;
+                UI.showToast(err.message, 'error');
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            const originalText = btn.textContent;
+            btn.textContent = 'Creating...';
+            
+            try {
+                await Auth.register(
+                    document.getElementById('reg-name').value,
+                    document.getElementById('reg-email').value,
+                    document.getElementById('reg-password').value,
+                    document.getElementById('reg-phone').value,
+                    document.getElementById('reg-address').value
+                );
+                UI.showToast('Registration successful! Please login.', 'success');
+                switchMode('login');
+                // Auto-fill email
+                document.getElementById('login-email').value = document.getElementById('reg-email').value;
+                document.querySelectorAll('.mode-btn')[0].classList.add('active'); // active login btn
+            } catch (err) {
+                btn.textContent = originalText;
+            }
+        }
+    </script>
+</body>
+</html>
