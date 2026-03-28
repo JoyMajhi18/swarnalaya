@@ -46,7 +46,7 @@ async function loadDashboard() {
             loadCatalog();
         }
     } catch (err) {
-        UI.showToast('Failed to sync dashboard intelligence loop.', 'error');
+        UI.showToast(`Dashboard Sync Failed: ${err.message}`, 'error');
     }
 }
 
