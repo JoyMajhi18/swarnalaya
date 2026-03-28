@@ -1,0 +1,328 @@
+================================================================================
+CATALOG & HOMEPAGE MODULE - SOURCE DOCUMENTATION
+================================================================================
+
+This module provides the primary user interface for browsing the product 
+catalog. It includes the landing page layout, real-time product fetching 
+logic, and the server-side product repository handler.
+
+--------------------------------------------------------------------------------
+FILE: index.html
+PATH: /frontend/index.html
+LANGUAGE: HTML / CSS (Embedded)
+--------------------------------------------------------------------------------
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SWARNALAYA Jewellery - Catalog</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .hero {
+            text-align: center;
+            padding: 5rem 1rem;
+            background: linear-gradient(rgba(10, 10, 12, 0.8), rgba(10, 10, 12, 1)), url('https://www.crunchyfashion.com/cdn/shop/files/SDJS0146_1.jpg?v=1726314556');
+            background-size: cover;
+            background-position: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2.5rem;
+        }
+        @media (max-width: 1200px) { .products-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) { .products-grid { grid-template-columns: 1fr; } }
+
+
+        .product-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border-color: rgba(212, 175, 55, 0.3);
+        }
+
+        .product-image {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .product-info {
+            padding: 1.5rem;
+        }
+
+        .product-title {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-main);
+        }
+
+        .product-category {
+            font-size: 0.85rem;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1rem;
+        }
+
+        .product-price {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-main);
+        }
+
+        .btn-add {
+            width: 100%;
+            background: rgba(212, 175, 55, 0.1);
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .btn-add:hover {
+            background: var(--primary);
+            color: #000;
+            box-shadow: 0 0 15px var(--primary-glow);
+        }
+
+        /* Skeleton loading */
+        .skeleton {
+            background: rgba(255, 255, 255, 0.05);
+            height: 400px;
+            border-radius: 12px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.6;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.6;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <a href="index.html" class="brand">SWARNALAYA.</a>
+        <div class="nav-links" id="nav-area">
+            <!-- Injected by JS -->
+        </div>
+    </nav>
+
+    <header class="hero">
+        <h1 class="animate-fade">Timeless Elegance</h1>
+        <p class="animate-fade" style="animation-delay: 0.2s;">Discover our exclusive collection of premium handcrafted
+            jewellery perfectly tailored for sophisticated tastes.</p>
+    </header>
+
+    <div class="container">
+        <div class="products-grid" id="catalog">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        Auth.requireAuth('user');
+    </script>
+    <script src="js/app.js"></script>
+
+</body>
+
+</html>
+
+--------------------------------------------------------------------------------
+FILE: app.js
+PATH: /frontend/js/app.js
+LANGUAGE: JAVASCRIPT
+--------------------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+    initNav();
+    runHealthCheck();
+    loadProducts();
+});
+
+async function runHealthCheck() {
+    try {
+        const res = await API.request('/health');
+        if (res.status === 'success') {
+            console.log('API health:', res.services, res.server);
+        }
+    } catch (err) {
+        console.warn('Health check failed:', err.message);
+        UI.showToast('Backend health check failed. Please restart the API router.', 'error');
+    }
+}
+
+function initNav() {
+    const navArea = document.getElementById('nav-area');
+    if (Auth.isLoggedIn()) {
+        const role = Auth.getRole();
+        if (role === 'admin') {
+            navArea.innerHTML = `
+                <a href="admin.html">Dashboard</a>
+                <a href="#" onclick="Auth.logout()">Logout</a>
+            `;
+        } else {
+            navArea.innerHTML = `
+                <a href="cart.html">My Cart</a>
+                <a href="orders.html">Purchases</a>
+                <a href="#" onclick="Auth.logout()">Logout</a>
+            `;
+        }
+    } else {
+        navArea.innerHTML = `<a href="login.html" class="btn" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">Sign In</a>`;
+    }
+}
+
+async function loadProducts() {
+    const catalog = document.getElementById('catalog');
+    try {
+        const res = await API.request('/products');
+        if (res.status === 'success') {
+            if (res.data.length === 0) {
+                catalog.innerHTML = `<h3 style="color:var(--text-muted); grid-column: 1/-1; text-align: center; padding: 4rem;">No products available in the catalog yet.</h3>`;
+                return;
+            }
+            
+            catalog.innerHTML = res.data.map((p, i) => `
+                <div class="product-card animate-fade" style="animation-delay: ${0.1 * i}s">
+                    <img src="${p.image_url && p.image_url !== 'null' ? (p.image_url.startsWith('http') ? p.image_url : '..' + p.image_url) : 'https://images.unsplash.com/photo-1596944924616-7b38e7cfac36?auto=format&fit=crop&q=80&w=600'}" class="product-image" alt="${p.name}">
+                    <div class="product-info">
+                        <div class="product-category">${p.category || 'Jewellery'}</div>
+                        <h3 class="product-title">${p.name}</h3>
+                        <div class="product-price">$${p.price.toFixed(2)}</div>
+                        <button class="btn-add" onclick="addToCart(${p.id})">Add to Cart</button>
+                    </div>
+                </div>
+            `).join('');
+
+        }
+    } catch (err) {
+        catalog.innerHTML = `<h3 style="color:var(--danger); grid-column: 1/-1; text-align: center; padding: 4rem;">Failed to load catalog server. Please ensure the backend is running.</h3>`;
+    }
+}
+
+async function addToCart(productId) {
+    if (!Auth.isLoggedIn()) {
+        window.location.href = 'login.html';
+        return;
+    }
+
+    try {
+        await API.request('/cart', {
+            method: 'POST',
+            body: JSON.stringify({ product_id: productId, quantity: 1 })
+        });
+        UI.showToast('Added to cart securely!', 'success');
+    } catch (err) {
+        // Handled by API class
+    }
+}
+
+--------------------------------------------------------------------------------
+FILE: products.php
+PATH: /api/products.php
+LANGUAGE: PHP
+--------------------------------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$routeParts = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+$id = isset($routeParts[2]) ? intval($routeParts[2]) : null;
+$method = $_SERVER['REQUEST_METHOD'];
+
+// Table: products
+// Columns: id, name, category, price, description, image
+
+if ($method === 'GET') {
+    if ($id) {
+        $query = "SELECT id, name, category, price, description, image_url FROM products WHERE id = ? LIMIT 0,1";
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(1, $id);
+        $stmt->execute();
+        
+        if ($stmt->rowCount() > 0) {
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $row['price'] = (float)$row['price'];
+            http_response_code(200);
+            echo json_encode(["status" => "success", "data" => $row]);
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "message" => "Product not found."]);
+        }
+    } else {
+        $query = "SELECT id, name, category, price, description, image_url FROM products";
+        $stmt = $db->prepare($query);
+        $stmt->execute();
+        
+        $products_arr = array();
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $row['price'] = (float)$row['price'];
+            array_push($products_arr, $row);
+        }
+        
+        http_response_code(200);
+        echo json_encode(["status" => "success", "data" => $products_arr]);
+    }
+} else {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+}
+?>

@@ -1,0 +1,227 @@
+================================================================================
+ORDER HISTORY MODULE - SOURCE DOCUMENTATION
+================================================================================
+
+This module allows users to view their past purchases, check payment 
+statuses, and see individual order details. It includes the history listing 
+interface and the order repository handler.
+
+--------------------------------------------------------------------------------
+FILE: orders.html
+PATH: /frontend/orders.html
+LANGUAGE: HTML / CSS (Embedded) / JS (Embedded)
+--------------------------------------------------------------------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase History - SWARNALAYA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .container { max-width: 900px; padding: 4rem 2rem; margin: 0 auto; }
+        .order-card { background: var(--bg-card); padding: 2.5rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 2rem; transition: transform 0.2s; }
+        .order-card:hover { border-color: rgba(212,175,55,0.2); transform: translateY(-3px); }
+        .status-badge { padding: 0.4rem 1rem; border-radius: 30px; font-size: 0.85rem; font-weight: bold; background: rgba(255,255,255,0.1); display: inline-block; }
+        .status-Paid { background: rgba(46, 213, 115, 0.2); color: #2ed573; box-shadow: 0 0 10px rgba(46, 213, 115, 0.2); }
+        .status-Pending { background: rgba(212, 175, 55, 0.2); color: var(--primary); box-shadow: 0 0 10px rgba(212, 175, 55, 0.2); }
+        
+        .order-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1.5rem;}
+        .order-meta p { color: var(--text-muted); margin-top: 0.3rem; font-size: 0.95rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="index.html" class="brand">SWARNALAYA.</a>
+        <div class="nav-links">
+            <a href="index.html">Catalog</a>
+            <a href="cart.html">Cart</a>
+            <a href="#" onclick="Auth.logout()">Logout</a>
+        </div>
+    </nav>
+    <div class="container animate-fade">
+        <h1 style="margin-bottom: 3rem; color: var(--text-main)">Order History</h1>
+        <div id="orders-list"><p style="color:var(--text-muted)">Gathering your purchase history...</p></div>
+    </div>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            Auth.requireAuth('user');
+            const list = document.getElementById('orders-list');
+            try {
+                const res = await API.request('/orders');
+                if(res.data.length === 0) return list.innerHTML = `<p style="color:var(--text-muted)">You haven't placed any orders yet.</p>`;
+                
+                list.innerHTML = res.data.map((o, i) => `
+                    <div class="order-card animate-fade" style="animation-delay: ${0.1 * i}s">
+                        <div class="order-header">
+                            <div class="order-meta">
+                                <h3>Order #${o.order_id}</h3>
+                                <p>Placed on ${new Date(o.order_date).toLocaleString()}</p>
+                            </div>
+                            <div style="text-align: right">
+                                <div class="status-badge status-${o.payment_status}">${o.payment_status || 'Unknown'}</div>
+                                <div style="font-size:1.6rem; font-weight:bold; color:var(--primary); margin-top:0.8rem;">$${o.total_amount.toFixed(2)}</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline" style="padding: 0.5rem 1rem; width: auto; font-size: 0.9rem" onclick="viewDetails(${o.order_id})">View Tracking & Details</button>
+                    </div>
+                `).join('');
+            } catch(err) {
+                list.innerHTML = `<p style="color:var(--danger)">Failed to load order history.</p>`;
+            }
+        });
+        
+        async function viewDetails(id) {
+            try {
+                const res = await API.request(`/orders/${id}`);
+                if (res.status === 'success') {
+                    const details = JSON.stringify(res.data, null, 2);
+                    alert('Order details:\n\n' + details);
+                } else {
+                    UI.showToast('Unable to retrieve order details', 'error');
+                }
+            } catch (err) {
+                UI.showToast('Failed to fetch order details', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
+
+--------------------------------------------------------------------------------
+FILE: orders.php
+PATH: /api/orders.php
+LANGUAGE: PHP
+--------------------------------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$routeParts = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+
+$authHeader = '';
+if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['HTTP_AUTHORIZATION']);
+} elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+} elseif (function_exists('apache_request_headers')) {
+    $requestHeaders = apache_request_headers();
+    if (isset($requestHeaders['Authorization'])) {
+        $authHeader = trim($requestHeaders['Authorization']);
+    }
+}
+
+$user_id = null;
+if (preg_match('/Bearer\s+(.*?)-(.*?)-(.*)/', $authHeader, $matches)) {
+    $user_id = intval($matches[2]); 
+}
+
+if (!$user_id) {
+    http_response_code(401);
+    echo json_encode(["status" => "error", "message" => "Unauthorized. Invalid or missing token."]);
+    exit();
+}
+
+$action_or_id = isset($routeParts[2]) ? $routeParts[2] : null;
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'POST' && $action_or_id === 'checkout') {
+    $data = json_decode(file_get_contents("php://input"));
+    
+    if (!empty($data->address) && !empty($data->payment_method)) {
+        $cart_query = "SELECT c.product_id, c.quantity, p.price FROM cart c JOIN products p ON c.product_id = p.id WHERE c.user_id = ?";
+        $cart_stmt = $db->prepare($cart_query);
+        $cart_stmt->execute([$user_id]);
+        
+        if ($cart_stmt->rowCount() > 0) {
+            $items = $cart_stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            try {
+                $db->beginTransaction();
+                
+                foreach ($items as $item) {
+                    $total_item_amount = $item['price'] * $item['quantity'];
+                    $order_query = "INSERT INTO orders (user_id, product_id, total_amount, quantity, payment_status, order_status) VALUES (?, ?, ?, ?, 'Pending', 'Processing')";
+                    $order_stmt = $db->prepare($order_query);
+                    $order_stmt->execute([$user_id, $item['product_id'], $total_item_amount, $item['quantity']]);
+                    $order_id = $db->lastInsertId();
+                    
+                    // insert payment record
+                    $payment_query = "INSERT INTO payments (order_id, amount, payment_method, payment_status) VALUES (?, ?, ?, 'Pending')";
+                    $payment_stmt = $db->prepare($payment_query);
+                    $payment_stmt->execute([$order_id, $total_item_amount, htmlspecialchars(strip_tags($data->payment_method))]);
+                }
+                
+                // clear cart
+                $clear_query = "DELETE FROM cart WHERE user_id = ?";
+                $clear_stmt = $db->prepare($clear_query);
+                $clear_stmt->execute([$user_id]);
+                
+                $db->commit();
+                
+                http_response_code(201);
+                echo json_encode(["status" => "success", "message" => "Order placed successfully"]);
+            } catch (Exception $e) {
+                $db->rollBack();
+                http_response_code(500);
+                echo json_encode(["status" => "error", "message" => "Failed to place order: " . $e->getMessage()]);
+            }
+        } else {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "Cart is empty."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Address and payment_method are required."]);
+    }
+
+} elseif ($method === 'GET') {
+    if ($action_or_id && is_numeric($action_or_id)) {
+        $order_id = intval($action_or_id);
+        $order_query = "SELECT o.order_id, o.total_amount, o.order_date, o.order_status, o.payment_status, p.payment_method, pr.name as product_name, o.quantity 
+                        FROM orders o 
+                        JOIN products pr ON o.product_id = pr.id
+                        LEFT JOIN payments p ON o.order_id = p.order_id 
+                        WHERE o.order_id = ? AND o.user_id = ?";
+        $order_stmt = $db->prepare($order_query);
+        $order_stmt->execute([$order_id, $user_id]);
+        
+        if ($order_stmt->rowCount() > 0) {
+            $order = $order_stmt->fetch(PDO::FETCH_ASSOC);
+            $order['total_amount'] = (float)$order['total_amount'];
+            
+            http_response_code(200);
+            echo json_encode(["status" => "success", "data" => $order]);
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "message" => "Order not found."]);
+        }
+    } else {
+        $order_query = "SELECT o.order_id, o.total_amount, o.order_date, o.payment_status, pr.name as product_name 
+                        FROM orders o 
+                        JOIN products pr ON o.product_id = pr.id
+                        WHERE o.user_id = ? ORDER BY o.order_date DESC";
+        $order_stmt = $db->prepare($order_query);
+        $order_stmt->execute([$user_id]);
+        
+        $orders_arr = array();
+        while ($row = $order_stmt->fetch(PDO::FETCH_ASSOC)) {
+            $row['total_amount'] = (float)$row['total_amount'];
+            array_push($orders_arr, $row);
+        }
+        
+        http_response_code(200);
+        echo json_encode(["status" => "success", "data" => $orders_arr]);
+    }
+} else {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+}
+
+?>

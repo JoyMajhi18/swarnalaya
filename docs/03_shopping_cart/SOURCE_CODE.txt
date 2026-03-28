@@ -1,0 +1,332 @@
+================================================================================
+SHOPPING CART MODULE - SOURCE DOCUMENTATION
+================================================================================
+
+This module manages the user's personal shopping cart, including item 
+quantities, real-time subtotal calculations, and the checkout interface for 
+initiating orders.
+
+--------------------------------------------------------------------------------
+FILE: cart.html
+PATH: /frontend/cart.html
+LANGUAGE: HTML / CSS (Embedded)
+--------------------------------------------------------------------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Cart - SWARNALAYA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .container { max-width: 1000px; padding: 4rem 2rem; margin: 0 auto; }
+        .cart-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+        @media (max-width: 768px) {
+            .cart-grid { grid-template-columns: 1fr; }
+        }
+        .cart-items {
+            background: var(--bg-card);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .cart-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .cart-item:last-child { border-bottom: none; }
+        .checkout-box {
+            background: rgba(212, 175, 55, 0.05);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid var(--primary);
+            height: fit-content;
+        }
+        .qty-controls { display: flex; gap: 1rem; align-items: center; }
+        .qty-btn {
+            background: var(--bg-dark); color: white; border: 1px solid rgba(255,255,255,0.1);
+            width: 30px; height: 30px; border-radius: 4px; cursor: pointer; transition: all 0.2s;
+        }
+        .qty-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .remove-btn { color: var(--danger); background: transparent; border: none; cursor: pointer; text-decoration: underline; margin-top:0.5rem; display:block; width:100%; text-align:right;}
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="index.html" class="brand">SWARNALAYA.</a>
+        <div class="nav-links">
+            <a href="index.html">Catalog</a>
+            <a href="orders.html">Purchases</a>
+            <a href="#" onclick="Auth.logout()">Logout</a>
+        </div>
+    </nav>
+    <div class="container animate-fade">
+        <h1 style="margin-bottom: 2rem; color: var(--primary)">Shopping Cart</h1>
+        <div class="cart-grid">
+            <div class="cart-items" id="cart-list">
+                <p style="color: var(--text-muted)">Loading cart...</p>
+            </div>
+            
+            <form class="checkout-box" id="checkout-form" onsubmit="handleCheckout(event)">
+                <h3 style="margin-bottom: 1.5rem">Order Summary</h3>
+                <div style="display:flex; justify-content:space-between; margin-bottom: 1rem;">
+                    <span>Subtotal</span>
+                    <strong id="subtotal" style="color: var(--primary)">$0.00</strong>
+                </div>
+                <hr style="border:none; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 1.5rem;">
+                
+                <h4 style="margin-bottom: 1rem">Delivery Details</h4>
+                <textarea id="address" placeholder="Full Delivery Address" rows="3" required></textarea>
+                
+                <h4 style="margin-bottom: 1rem; margin-top: 1rem;">Payment Method</h4>
+                <select id="payment-method" required>
+                    <option value="Credit Card">Credit Card</option>
+                    <option value="PayPal">PayPal</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                </select>
+
+                <button type="submit" class="btn" style="margin-top: 2rem" id="checkout-btn">Complete Purchase</button>
+            </form>
+        </div>
+    </div>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        Auth.requireAuth('user');
+    </script>
+    <script src="js/cart.js"></script>
+
+</body>
+</html>
+
+--------------------------------------------------------------------------------
+FILE: cart.js
+PATH: /frontend/js/cart.js
+LANGUAGE: JAVASCRIPT
+--------------------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+    Auth.requireAuth('user');
+    loadCart();
+});
+
+async function loadCart() {
+    const list = document.getElementById('cart-list');
+    try {
+        const res = await API.request('/cart');
+        if (res.status === 'success') {
+            document.getElementById('subtotal').textContent = `$${res.cart_subtotal.toFixed(2)}`;
+            
+            if (res.data.length === 0) {
+                list.innerHTML = `<p style="color:var(--text-muted)">Your cart is currently empty. Head over to our catalog to discover our elegant pieces.</p>`;
+                document.getElementById('checkout-btn').disabled = true;
+                document.getElementById('checkout-btn').style.opacity = '0.5';
+                return;
+            }
+            
+            list.innerHTML = res.data.map(item => `
+                <div class="cart-item">
+                    <div>
+                        <h4 style="font-size: 1.1rem; margin-bottom: 0.5rem">${item.product_name}</h4>
+                        <div style="color: var(--text-muted)">$${item.price.toFixed(2)} each</div>
+                    </div>
+                    <div class="qty-controls">
+                        <button class="qty-btn" onclick="updateQty(${item.cart_item_id}, ${item.quantity - 1})">-</button>
+                        <span style="min-width: 20px; text-align: center;">${item.quantity}</span>
+                        <button class="qty-btn" onclick="updateQty(${item.cart_item_id}, ${item.quantity + 1})">+</button>
+                    </div>
+                    <div>
+                        <div style="font-weight: bold; font-size: 1.2rem; color: var(--primary)">$${item.total_item_price.toFixed(2)}</div>
+                        <button class="remove-btn" onclick="removeObj(${item.cart_item_id})">Remove</button>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('checkout-btn').disabled = false;
+            document.getElementById('checkout-btn').style.opacity = '1';
+        }
+    } catch (err) {
+        list.innerHTML = `<p style="color:var(--danger)">Failed to load cart.</p>`;
+    }
+}
+
+async function updateQty(cartItemId, newQty) {
+    if (newQty < 1) return removeObj(cartItemId);
+    try {
+        await API.request(`/cart/${cartItemId}`, {
+            method: 'PUT', body: JSON.stringify({ quantity: newQty })
+        });
+        loadCart();
+    } catch (err) {}
+}
+
+async function removeObj(cartItemId) {
+    try {
+        await API.request(`/cart/${cartItemId}`, { method: 'DELETE' });
+        loadCart();
+        UI.showToast('Item removed', 'success');
+    } catch (err) {}
+}
+
+async function handleCheckout(e) {
+    e.preventDefault();
+    const btn = document.getElementById('checkout-btn');
+    btn.textContent = 'Processing...';
+    btn.disabled = true;
+
+    try {
+        const res = await API.request('/orders/checkout', {
+            method: 'POST',
+            body: JSON.stringify({
+                address: document.getElementById('address').value,
+                payment_method: document.getElementById('payment-method').value
+            })
+        });
+        if(res.status === 'success') {
+            UI.showToast('Purchase Successful! Redirecting...', 'success');
+            setTimeout(() => window.location.href = 'orders.html', 2000);
+        }
+    } catch(err) {
+        btn.textContent = 'Complete Purchase';
+        btn.disabled = false;
+    }
+}
+
+--------------------------------------------------------------------------------
+FILE: cart.php
+PATH: /api/cart.php
+LANGUAGE: PHP
+--------------------------------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$routeParts = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+
+$authHeader = '';
+if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['HTTP_AUTHORIZATION']);
+} elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+} elseif (function_exists('apache_request_headers')) {
+    $requestHeaders = apache_request_headers();
+    if (isset($requestHeaders['Authorization'])) {
+        $authHeader = trim($requestHeaders['Authorization']);
+    }
+}
+
+$user_id = null;
+if (preg_match('/Bearer\s+(.*?)-(.*?)-(.*)/', $authHeader, $matches)) {
+    $user_id = intval($matches[2]); 
+}
+
+if (!$user_id) {
+    http_response_code(401);
+    echo json_encode(["status" => "error", "message" => "Unauthorized. Invalid or missing token."]);
+    exit();
+}
+
+$cart_item_id = isset($routeParts[2]) ? intval($routeParts[2]) : null;
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'GET') {
+    $query = "SELECT c.id as cart_item_id, p.id as product_id, p.name as product_name, p.price, c.quantity, (p.price * c.quantity) as total_item_price 
+              FROM cart c 
+              JOIN products p ON c.product_id = p.id 
+              WHERE c.user_id = ?";
+    $stmt = $db->prepare($query);
+    $stmt->execute([$user_id]);
+    
+    $cart_arr = array();
+    $subtotal = 0;
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $row['price'] = (float)$row['price'];
+        $row['quantity'] = (int)$row['quantity'];
+        $row['total_item_price'] = (float)$row['total_item_price'];
+        $subtotal += $row['total_item_price'];
+        array_push($cart_arr, $row);
+    }
+    http_response_code(200);
+    echo json_encode(["status" => "success", "data" => $cart_arr, "cart_subtotal" => $subtotal]);
+
+} elseif ($method === 'POST') {
+    $data = json_decode(file_get_contents("php://input"));
+    if (!empty($data->product_id) && !empty($data->quantity)) {
+        $check_query = "SELECT id, quantity FROM cart WHERE user_id = ? AND product_id = ?";
+        $check_stmt = $db->prepare($check_query);
+        $check_stmt->execute([$user_id, $data->product_id]);
+        
+        if ($check_stmt->rowCount() > 0) {
+            $row = $check_stmt->fetch(PDO::FETCH_ASSOC);
+            $new_quantity = $row['quantity'] + $data->quantity;
+            $update_query = "UPDATE cart SET quantity = ? WHERE id = ?";
+            $update_stmt = $db->prepare($update_query);
+            $update_stmt->execute([$new_quantity, $row['id']]);
+            http_response_code(200);
+            echo json_encode(["status" => "success", "message" => "Cart updated", "cart_item_id" => $row['id']]);
+        } else {
+            $insert_query = "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)";
+            $insert_stmt = $db->prepare($insert_query);
+            if ($insert_stmt->execute([$user_id, $data->product_id, $data->quantity])) {
+                http_response_code(201);
+                echo json_encode(["status" => "success", "message" => "Product added to cart", "cart_item_id" => $db->lastInsertId()]);
+            } else {
+                http_response_code(500); echo json_encode(["status" => "error", "message" => "Database error."]);
+            }
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Product ID and quantity required."]);
+    }
+
+} elseif ($method === 'PUT') {
+    if ($cart_item_id) {
+        $data = json_decode(file_get_contents("php://input"));
+        if (!empty($data->quantity)) {
+            $query = "UPDATE cart SET quantity = ? WHERE id = ? AND user_id = ?";
+            $stmt = $db->prepare($query);
+            if ($stmt->execute([$data->quantity, $cart_item_id, $user_id]) && $stmt->rowCount() > 0) {
+                http_response_code(200);
+                echo json_encode(["status" => "success", "message" => "Cart item updated successfully"]);
+            } else {
+                http_response_code(404);
+                echo json_encode(["status" => "error", "message" => "Cart item not found or you don't have permission."]);
+            }
+        } else {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "Quantity payload required."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Cart item ID required in URL."]);
+    }
+
+} elseif ($method === 'DELETE') {
+    if ($cart_item_id) {
+        $query = "DELETE FROM cart WHERE id = ? AND user_id = ?";
+        $stmt = $db->prepare($query);
+        if ($stmt->execute([$cart_item_id, $user_id]) && $stmt->rowCount() > 0) {
+            http_response_code(200);
+            echo json_encode(["status" => "success", "message" => "Item removed from cart"]);
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "message" => "Cart item not found or you don't have permission."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Cart item ID required in URL."]);
+    }
+} else {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+}
+?>

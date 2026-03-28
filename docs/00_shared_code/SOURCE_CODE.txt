@@ -1,0 +1,837 @@
+================================================================================
+SHARED SYSTEM COMPONENTS - SOURCE DOCUMENTATION
+================================================================================
+
+This module contains the core architectural files, environment configurations, 
+routing logic, shared styles, and utility scripts used across the entire 
+Swarnalaya platform.
+
+--------------------------------------------------------------------------------
+FILE: .env
+PATH: /.env
+LANGUAGE: CONFIG
+--------------------------------------------------------------------------------
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=joy
+DB_USER=root
+DB_PASS=
+DATABASE_URL=mysql+pymysql://root:@127.0.0.1:3306/joy
+
+--------------------------------------------------------------------------------
+FILE: .htaccess
+PATH: /.htaccess
+LANGUAGE: APACHE CONFIG
+--------------------------------------------------------------------------------
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^api/(.*)$ index.php [QSA,L]
+
+--------------------------------------------------------------------------------
+FILE: index.php
+PATH: /index.php
+LANGUAGE: PHP (Router)
+--------------------------------------------------------------------------------
+<?php
+header("Access-Control-Allow-Origin: *");
+header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Max-Age: 3600");
+header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$uri = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+
+if (!isset($uri[1])) {
+    echo json_encode(["status" => "error", "message" => "Invalid API endpoint."]);
+    exit();
+}
+
+$resource = $uri[1];
+$file = __DIR__ . "/api/" . $resource . ".php";
+
+if (file_exists($file)) {
+    require_once $file;
+} else {
+    http_response_code(404);
+    echo json_encode(["status" => "error", "message" => "Endpoint not found."]);
+}
+?>
+
+--------------------------------------------------------------------------------
+FILE: database.php
+PATH: /config/database.php
+LANGUAGE: PHP
+--------------------------------------------------------------------------------
+<?php
+class Database {
+    private $host = "127.0.0.1";
+    private $db_name = "joy";
+    private $username = "root";
+    private $password = "";
+    public $conn;
+
+    public function getConnection() {
+        $this->conn = null;
+        try {
+            $this->conn = new PDO("mysql:host=" . $this->host . ";dbname=" . $this->db_name, $this->username, $this->password);
+            $this->conn->exec("set names utf8");
+            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        } catch(PDOException $exception) {
+            echo "Connection error: " . $exception->getMessage();
+        }
+        return $this->conn;
+    }
+}
+?>
+
+--------------------------------------------------------------------------------
+FILE: schema.sql
+PATH: /database/schema.sql
+LANGUAGE: SQL
+--------------------------------------------------------------------------------
+CREATE DATABASE IF NOT EXISTS joy;
+USE joy;
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('user', 'admin') DEFAULT 'user',
+    phone VARCHAR(20),
+    address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price DECIMAL(10, 2) NOT NULL,
+    category VARCHAR(100),
+    image_url VARCHAR(255),
+    stock INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE cart (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT DEFAULT 1,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+CREATE TABLE orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    product_id INT NOT NULL,
+    total_amount DECIMAL(10, 2) NOT NULL,
+    quantity INT NOT NULL,
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    payment_status ENUM('Pending', 'Paid', 'Failed') DEFAULT 'Pending',
+    order_status ENUM('Processing', 'Shipped', 'Delivered', 'Cancelled') DEFAULT 'Processing',
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+--------------------------------------------------------------------------------
+FILE: health.php
+PATH: /api/health.php
+LANGUAGE: PHP
+--------------------------------------------------------------------------------
+<?php
+echo json_encode([
+    "status" => "online",
+    "timestamp" => date('Y-m-d H:i:s'),
+    "service" => "Swarnalaya API"
+]);
+?>
+
+--------------------------------------------------------------------------------
+FILE: style.css
+PATH: /frontend/css/style.css
+LANGUAGE: CSS
+--------------------------------------------------------------------------------
+:root {
+    --primary: #D4AF37;
+    --primary-dark: #B8860B;
+    --bg-dark: #0A0A0B;
+    --bg-card: #141417;
+    --text-main: #FFFFFF;
+    --text-muted: #A0A0A5;
+    --danger: #FF4D4D;
+    --success: #2ED573;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+body { background: var(--bg-dark); color: var(--text-main); line-height: 1.6; overflow-x: hidden; }
+
+nav {
+    padding: 1.5rem 10%; background: rgba(10, 10, 11, 0.8);
+    backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 1000;
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.brand { font-size: 1.8rem; font-weight: 700; color: var(--primary); text-decoration: none; letter-spacing: 2px; }
+.nav-links a { color: var(--text-main); text-decoration: none; margin-left: 2rem; font-weight: 500; transition: 0.3s; }
+.nav-links a:hover { color: var(--primary); }
+
+.btn {
+    background: var(--primary); color: #000; padding: 0.8rem 2rem; border-radius: 4px;
+    border: none; font-weight: 600; cursor: pointer; transition: 0.3s; width: 100%;
+}
+.btn:hover { background: var(--primary-dark); transform: translateY(-2px); }
+
+input, textarea, select {
+    width: 100%; padding: 1rem; background: #1a1a1d; border: 1px solid rgba(255,255,255,0.1);
+    color: white; border-radius: 4px; margin-bottom: 1rem;
+}
+
+.animate-fade { animation: fadeIn 0.8s ease forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+--------------------------------------------------------------------------------
+FILE: api.js
+PATH: /frontend/js/api.js
+LANGUAGE: JAVASCRIPT
+--------------------------------------------------------------------------------
+const API_BASE = '/api';
+
+const API = {
+    async request(endpoint, options = {}) {
+        const token = localStorage.getItem('token');
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+            ...options.headers
+        };
+
+        const response = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+        const data = await response.json();
+        
+        if (!response.ok) {
+            UI.showToast(data.message || 'Server error', 'error');
+            throw new Error(data.message);
+        }
+        return data;
+    }
+};
+
+const UI = {
+    showToast(msg, type = 'info') {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed; bottom: 20px; right: 20px; padding: 1rem 2rem;
+            background: ${type === 'error' ? '#ff4d4d' : '#D4AF37'}; color: ${type === 'error' ? 'white' : 'black'};
+            border-radius: 4px; z-index: 10000; font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: all 0.3s ease;
+        `;
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+    }
+};
+
+--------------------------------------------------------------------------------
+FILE: init_db.php
+PATH: /init_db.php
+LANGUAGE: PHP
+--------------------------------------------------------------------------------
+<?php
+require_once __DIR__ . '/config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+try {
+    // Create users table
+    $db->exec("CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        phone VARCHAR(20),
+        address TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );");
+    
+    // Create admin table
+    $db->exec("CREATE TABLE IF NOT EXISTS admin (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );");
+
+    // Insert admin if not exists
+    $stmt = $db->query("SELECT * FROM admin WHERE username = 'admin'");
+    if ($stmt->rowCount() == 0) {
+        $db->exec("INSERT INTO admin (username, password) VALUES ('admin', 'admin123')");
+        echo "Admin created (admin / admin123)\n";
+    }
+
+    // Insert test user if not exists
+    $stmt = $db->query("SELECT * FROM users WHERE email = 'user@test.com'");
+    if ($stmt->rowCount() == 0) {
+        $hash = password_hash('user123', PASSWORD_BCRYPT);
+        $db->exec("INSERT INTO users (name, email, password) VALUES ('Test User', 'user@test.com', '$hash')");
+        echo "User created (user@test.com / user123)\n";
+    }
+
+    echo "Initialization complete!\n";
+
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage() . "\n";
+}
+?>
+
+--------------------------------------------------------------------------------
+FILE: test_db.php
+PATH: /test_db.php
+LANGUAGE: PHP
+--------------------------------------------------------------------------------
+<?php
+$host = "127.0.0.1";
+$db_name = "jewellery_db";
+$username = "root";
+$password = "";
+
+try {
+    $conn = new PDO("mysql:host=" . $host . ";dbname=" . $db_name, $username, $password);
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    echo "Connected successfully\n";
+} catch(PDOException $exception) {
+    echo "Connection failed: " . $exception->getMessage() . "\n";
+}
+?>
+
+--------------------------------------------------------------------------------
+FILE: joy_db_migration.py
+PATH: /joy_db_migration.py
+LANGUAGE: PYTHON
+--------------------------------------------------------------------------------
+import os
+import pymysql
+import argparse
+from dotenv import load_dotenv
+import datetime
+import re
+
+# Load environment variables
+load_dotenv()
+
+DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASS = os.getenv("DB_PASS", "")
+DB_NAME = os.getenv("DB_NAME", "joy")
+SQL_FILE = "joy_migration.sql"
+
+def get_connection(include_db=True):
+    """Establish a connection to the MySQL server."""
+    try:
+        return pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASS,
+            database=DB_NAME if include_db else None,
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+    except Exception as e:
+        print(f"Error connecting to database: {e}")
+        return None
+
+def export_db():
+    """Export the entire database schema and data to a SQL file."""
+    print(f"Starting export of database '{DB_NAME}'...")
+    conn = get_connection()
+    if not conn:
+        return
+
+    try:
+        with conn.cursor() as cursor:
+            # Get all tables
+            cursor.execute("SHOW TABLES")
+            tables = [list(row.values())[0] for row in cursor.fetchall()]
+            
+            if not tables:
+                print("No tables found in the database.")
+                return
+
+            with open(SQL_FILE, "w", encoding="utf-8") as f:
+                f.write(f"-- Joy DB Migration Dump\n")
+                f.write(f"-- Generated: {datetime.datetime.now()}\n\n")
+                f.write(f"SET FOREIGN_KEY_CHECKS = 0;\n\n")
+
+                for table in tables:
+                    print(f"Exporting table: {table}")
+                    
+                    # Get table creation schema
+                    cursor.execute(f"SHOW CREATE TABLE `{table}`")
+                    create_stmt = cursor.fetchone()['Create Table']
+                    f.write(f"DROP TABLE IF EXISTS `{table}`;\n")
+                    f.write(f"{create_stmt};\n\n")
+
+                    # Get table data
+                    cursor.execute(f"SELECT * FROM `{table}`")
+                    rows = cursor.fetchall()
+                    
+                    if rows:
+                        f.write(f"-- Table data: {table}\n")
+                        for row in rows:
+                            # Safely format values
+                            formatted_values = []
+                            for val in row.values():
+                                if val is None:
+                                    formatted_values.append("NULL")
+                                elif isinstance(val, (int, float)):
+                                    formatted_values.append(str(val))
+                                else:
+                                    # Escape single quotes
+                                    escaped_val = str(val).replace("'", "''")
+                                    formatted_values.append(f"'{escaped_val}'")
+                            
+                            cols = ", ".join([f"`{c}`" for c in row.keys()])
+                            vals = ", ".join(formatted_values)
+                            f.write(f"INSERT INTO `{table}` ({cols}) VALUES ({vals});\n")
+                        f.write("\n")
+
+                f.write(f"SET FOREIGN_KEY_CHECKS = 1;\n")
+                print(f"Successfully exported to {SQL_FILE}")
+
+    finally:
+        conn.close()
+
+def restore_db():
+    """Restore the database from the SQL file."""
+    if not os.path.exists(SQL_FILE):
+        print(f"Error: Migration file '{SQL_FILE}' not found.")
+        return
+
+    print(f"Starting restoration to database '{DB_NAME}'...")
+    
+    # Connect without specifying database first to create it if needed
+    conn = get_connection(include_db=False)
+    if not conn:
+        return
+
+    try:
+        with conn.cursor() as cursor:
+            # Create database
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}`")
+            cursor.execute(f"USE `{DB_NAME}`")
+            
+            print(f"Reading {SQL_FILE}...")
+            conn.close()
+            
+            conn = pymysql.connect(
+                host=DB_HOST,
+                port=DB_PORT,
+                user=DB_USER,
+                password=DB_PASS,
+                database=DB_NAME,
+                charset='utf8mb4',
+                client_flag=pymysql.constants.CLIENT.MULTI_STATEMENTS
+            )
+            
+            with open(SQL_FILE, "r", encoding="utf-8") as f:
+                sql_script = f.read()
+                
+            with conn.cursor() as cursor:
+                # Use multi-statement execution
+                cursor.execute(sql_script)
+                print("All schema and data have been successfully seeded.")
+
+    except Exception as e:
+        print(f"Restore failed: {e}")
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Joy DB Migration Utility")
+    parser.add_argument("--export", action="store_true", help="Dump database schema and data to SQL file")
+    parser.add_argument("--restore", action="store_true", help="Restore database schema and data from SQL file")
+
+    args = parser.parse_args()
+
+    if args.export:
+        export_db()
+    elif args.restore:
+        restore_db()
+    else:
+        parser.print_help()
+
+--------------------------------------------------------------------------------
+FILE: joy_migration.sql
+PATH: /joy_migration.sql
+LANGUAGE: SQL
+--------------------------------------------------------------------------------
+-- Joy DB Migration Dump
+-- Generated: 2026-03-28 10:59:42.585865
+
+SET FOREIGN_KEY_CHECKS = 0;
+
+DROP TABLE IF EXISTS `cart`;
+CREATE TABLE `cart` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `product_id` int NOT NULL,
+  `quantity` int DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  KEY `product_id` (`product_id`),
+  CONSTRAINT `cart_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `cart_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+DROP TABLE IF EXISTS `order_items`;
+CREATE TABLE `order_items` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_id` int NOT NULL,
+  `product_id` int NOT NULL,
+  `quantity` int NOT NULL,
+  `price` decimal(10,2) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `order_id` (`order_id`),
+  KEY `product_id` (`product_id`),
+  CONSTRAINT `order_items_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `order_items_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`) VALUES (1, 1, 11, 1, '4500.00');
+
+DROP TABLE IF EXISTS `orders`;
+CREATE TABLE `orders` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `address` text NOT NULL,
+  `total_amount` decimal(10,2) NOT NULL,
+  `status` enum('Pending','Processing','Shipped','Delivered','Cancelled') DEFAULT 'Pending',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `orders_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO `orders` (`id`, `user_id`, `address`, `total_amount`, `status`, `created_at`) VALUES (1, 1, 'aqefa ADFASDF A', '4500.00', 'Pending', '2026-03-27 00:00:23');
+
+DROP TABLE IF EXISTS `payments`;
+CREATE TABLE `payments` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_id` int NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `payment_method` varchar(50) NOT NULL,
+  `payment_status` enum('Pending','Paid','Failed') DEFAULT 'Pending',
+  `payment_date` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `order_id` (`order_id`),
+  CONSTRAINT `payments_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO `payments` (`id`, `order_id`, `amount`, `payment_method`, `payment_status`, `payment_date`) VALUES (1, 1, '4500.00', 'Credit Card', 'Pending', '2026-03-27 00:00:23');
+
+DROP TABLE IF EXISTS `products`;
+CREATE TABLE `products` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `description` text,
+  `price` decimal(10,2) NOT NULL,
+  `stock` int DEFAULT '0',
+  `category` varchar(100) DEFAULT NULL,
+  `image_url` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO `products` (`id`, `name`, `description`, `price`, `stock`, `category`, `image_url`, `created_at`) VALUES (11, 'Celestial Diadem Ring', 'A stunning 18k white gold ring featuring a 2-carat central diamond surrounded by a halo of micro-pave stones. Ideal for engagements or grand celebrations.', '4500.00', 5, 'Rings', 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?q=80&w=1000&auto=format&fit=crop', '2026-03-26 23:51:39');
+INSERT INTO `products` (`id`, `name`, `description`, `price`, `stock`, `category`, `image_url`, `created_at`) VALUES (12, 'Etheria Pearl Necklace', 'Lustrous South Sea pearls hand-strung on a delicate 22k yellow gold chain. A timeless piece that radiates sophistication.', '1200.50', 10, 'Necklaces', 'https://images.unsplash.com/photo-1599643477877-530eb83abc8e?q=80&w=1000&auto=format&fit=crop', '2026-03-26 23:51:39');
+INSERT INTO `products` (`id`, `name`, `description`, `price`, `stock`, `category`, `image_url`, `created_at`) VALUES (13, 'Midnight Velvet Sapphire Earrings', 'Deep blue sapphires encased in a vintage-inspired platinum setting. These earrings capture the essence of high-society elegance.', '2850.00', 3, 'Earrings', 'https://images.unsplash.com/photo-1635767798638-3e25d30925a9?q=80&w=1000&auto=format&fit=crop', '2026-03-26 23:51:39');
+INSERT INTO `products` (`id`, `name`, `description`, `price`, `stock`, `category`, `image_url`, `created_at`) VALUES (14, 'Gilded Serpent Bracelet', 'An intricately designed 24k gold bracelet with a modern snake-like wrap design. Features tiny emerald accents for eyes.', '3200.00', 7, 'Bracelets', 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=1000&auto=format&fit=crop', '2026-03-26 23:51:39');
+INSERT INTO `products` (`id`, `name`, `description`, `price`, `stock`, `category`, `image_url`, `created_at`) VALUES (15, 'Rose Gold Twilight Pendant', 'A heart-shaped rose gold pendant with a subtle pink tourmaline centerpiece. Perfect for a romantic gift.', '850.00', 15, 'Pendants', 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1000&auto=format&fit=crop', '2026-03-26 23:51:39');
+
+DROP TABLE IF EXISTS `users`;
+CREATE TABLE `users` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `address` text,
+  `role` enum('user','admin') DEFAULT 'user',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `email` (`email`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT INTO `users` (`id`, `name`, `email`, `password`, `phone`, `address`, `role`, `created_at`) VALUES (1, 'md afsar', 'mdafsaransal@gmail.com', '$2y$12$eK6pqHGu02d5RuoRhxYR/egORXtIAKF0D8NJgzyVXr1KoThtW4iTC', '08235449893', 'Bhuli D block sec-6 q no.7, DHANBAD JHARKHAND', 'user', '2026-03-26 23:41:48');
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+--------------------------------------------------------------------------------
+FILE: seed_admin.py
+PATH: /seed_admin.py
+LANGUAGE: PYTHON
+--------------------------------------------------------------------------------
+import os
+import bcrypt
+import pymysql
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASS = os.getenv("DB_PASS", "")
+DB_NAME = os.getenv("DB_NAME", "joy")
+
+def seed_admin():
+    print("Seeding admin user...")
+    
+    # User details
+    name = "Admin Joy"
+    email = "joyaddmin@gmail.com"
+    password = "admin123"
+    role = "admin"
+
+    # Hash password using bcrypt
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    
+    try:
+        conn = pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASS,
+            database=DB_NAME
+        )
+        with conn.cursor() as cursor:
+            # Check if user already exists
+            cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+            if cursor.fetchone():
+                print(f"User with email '{email}' already exists.")
+                return
+
+            # Insert new admin user
+            sql = """
+                INSERT INTO users (name, email, password, role)
+                VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(sql, (name, email, hashed_password.decode('utf-8'), role))
+            conn.commit()
+            print(f"Successfully seeded admin user: {email}")
+
+    except Exception as e:
+        print(f"Error seeding admin user: {e}")
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
+if __name__ == "__main__":
+    seed_admin()
+
+--------------------------------------------------------------------------------
+FILE: seed_products.py
+PATH: /seed_products.py
+LANGUAGE: PYTHON
+--------------------------------------------------------------------------------
+import os
+from sqlalchemy import text
+from database import engine
+
+# Dummy product data for Swarnalaya Jewellery
+products = [
+    {
+        "name": "Celestial Diadem Ring",
+        "description": "A stunning 18k white gold ring featuring a 2-carat central diamond surrounded by a halo of micro-pave stones. Ideal for engagements or grand celebrations.",
+        "price": 4500.00,
+        "stock": 5,
+        "image_url": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?q=80&w=1000&auto=format&fit=crop"
+    },
+    {
+        "name": "Etheria Pearl Necklace",
+        "description": "Lustrous South Sea pearls hand-strung on a delicate 22k yellow gold chain.",
+        "price": 1200.50,
+        "stock": 10,
+        "image_url": "https://images.unsplash.com/photo-1599643477877-530eb83abc8e?q=80&w=1000&auto=format&fit=crop"
+    },
+    {
+        "name": "Midnight Velvet Sapphire Earrings",
+        "description": "Deep blue sapphires encased in a vintage-inspired platinum setting.",
+        "price": 2850.00,
+        "stock": 3,
+        "image_url": "https://images.unsplash.com/photo-1635767798638-3e25d30925a9?q=80&w=1000&auto=format&fit=crop"
+    },
+    {
+        "name": "Gilded Serpent Bracelet",
+        "description": "An intricately designed 24k gold bracelet with a modern snake-like wrap design.",
+        "price": 3200.00,
+        "stock": 7,
+        "image_url": "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=1000&auto=format&fit=crop"
+    },
+    {
+        "name": "Rose Gold Twilight Pendant",
+        "description": "A heart-shaped rose gold pendant with a subtle pink tourmaline centerpiece.",
+        "price": 850.00,
+        "stock": 15,
+        "image_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1000&auto=format&fit=crop"
+    }
+]
+
+def seed_database():
+    try:
+        print("Connecting to database...")
+        with engine.connect() as connection:
+            print(f"Seeding {len(products)} products...")
+            
+            insert_query = text("""
+                INSERT INTO products (name, description, price, stock, category, image_url)
+                VALUES (:name, :description, :price, :stock, :category, :image_url)
+            """)
+            
+            connection.execute(text("DELETE FROM products"))
+            
+            for product in products:
+                if 'Ring' in product['name']: product['category'] = 'Rings'
+                elif 'Necklace' in product['name']: product['category'] = 'Necklaces'
+                elif 'Earrings' in product['name']: product['category'] = 'Earrings'
+                elif 'Bracelet' in product['name']: product['category'] = 'Bracelets'
+                else: product['category'] = 'Pendants'
+                
+                connection.execute(insert_query, product)
+            
+            connection.commit()
+            print("Database successfully seeded!")
+            
+    except Exception as e:
+        print(f"Error seeding database: {e}")
+
+if __name__ == "__main__":
+    seed_database()
+
+--------------------------------------------------------------------------------
+FILE: fix_db_schema.py
+PATH: /fix_db_schema.py
+LANGUAGE: PYTHON
+--------------------------------------------------------------------------------
+from database import engine
+from sqlalchemy import text
+
+def fix_database():
+    try:
+        with engine.connect() as conn:
+            print("Adding 'payments' table...")
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS payments (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    order_id INT NOT NULL,
+                    amount DECIMAL(10, 2) NOT NULL,
+                    payment_method VARCHAR(50) NOT NULL,
+                    payment_status ENUM('Pending', 'Paid', 'Failed') DEFAULT 'Pending',
+                    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+                )
+            """))
+            print("Renaming 'delivery_address' to 'address' in 'orders' table...")
+            try:
+                conn.execute(text("ALTER TABLE orders CHANGE COLUMN delivery_address address TEXT NOT NULL"))
+            except Exception as e:
+                print(f"Column rename info: {e}")
+            conn.commit()
+            print("Database fix completed successfully!")
+    except Exception as e:
+        print(f"Error fixing database: {e}")
+
+if __name__ == "__main__":
+    fix_database()
+
+--------------------------------------------------------------------------------
+FILE: update_db.py
+PATH: /update_db.py
+LANGUAGE: PYTHON
+--------------------------------------------------------------------------------
+from database import engine
+from sqlalchemy import text
+
+def update_table():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE products ADD COLUMN category VARCHAR(100) AFTER stock"))
+            conn.commit()
+            print("Successfully added 'category' column to 'products' table!")
+    except Exception as e:
+        if "Duplicate column name" in str(e):
+            print("'category' column already exists.")
+        else:
+            print(f"Error updating table: {e}")
+
+if __name__ == "__main__":
+    update_table()
+
+--------------------------------------------------------------------------------
+FILE: test_connection.py
+PATH: /test_connection.py
+LANGUAGE: PYTHON
+--------------------------------------------------------------------------------
+import os
+from sqlalchemy import text
+from database import engine
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def test_connection():
+    try:
+        connection_url = os.getenv("DATABASE_URL")
+        print(f"Testing connection to: {connection_url}")
+        with engine.connect() as connection:
+            result = connection.execute(text("SELECT VERSION()"))
+            version = result.fetchone()
+            print(f"Success! Database version: {version[0]}")
+    except Exception as e:
+        print(f"Connection failed: {e}")
+
+if __name__ == "__main__":
+    test_connection()
+
+--------------------------------------------------------------------------------
+FILE: database.py
+PATH: /database.py
+LANGUAGE: PYTHON
+--------------------------------------------------------------------------------
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL not found in .env file")
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
