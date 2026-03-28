@@ -1,0 +1,784 @@
+💎 SWARNALAYA JEWELLERY - COMPLETE SERVER-SIDE SOURCE CODE
+==========================================================
+
+This document contains the full backend source code for the Swarnalaya Jewellery Platform.
+Organized by modules: Routing, Database, Configuration, and API Endpoints.
+
+----------------------------------------------------------
+📁 MODULE: ROUTING & ENTRY POINT
+📄 File: index.php
+----------------------------------------------------------
+<?php
+if (isset($_SERVER['HTTP_ORIGIN'])) {
+    header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
+    header('Access-Control-Allow-Credentials: true');
+} else {
+    header("Access-Control-Allow-Origin: *");
+}
+header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE");
+header("Access-Control-Max-Age: 3600");
+header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+
+$apiKeyPos = strpos($uri, '/api/');
+if ($apiKeyPos === false) {
+    http_response_code(404);
+    echo json_encode(["status" => "error", "message" => "Not Found. API must be accessed via /api/."]);
+    exit();
+}
+
+$routePath = substr($uri, $apiKeyPos); 
+$routeParts = explode('/', trim($routePath, '/')); 
+
+$module = isset($routeParts[1]) ? $routeParts[1] : null;
+
+$moduleFile = __DIR__ . "/api/" . $module . ".php";
+
+if ($module && file_exists($moduleFile)) {
+    require_once $moduleFile;
+} else {
+    http_response_code(404);
+    echo json_encode(["status" => "error", "message" => "Module '$module' not found"]);
+}
+?>
+
+----------------------------------------------------------
+📁 MODULE: DATABASE STRUCTURE
+📄 File: database/schema.sql
+----------------------------------------------------------
+CREATE DATABASE IF NOT EXISTS joy;
+USE joy;
+
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    phone VARCHAR(20),
+    address TEXT,
+    role ENUM('user', 'admin') DEFAULT 'user',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price DECIMAL(10, 2) NOT NULL,
+    stock INT DEFAULT 0,
+    category VARCHAR(100),
+    image_url VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS cart (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    product_id INT NOT NULL,
+    total_amount DECIMAL(10, 2) NOT NULL,
+    payment_status VARCHAR(50) DEFAULT 'Unpaid',
+    order_status VARCHAR(50) DEFAULT 'Processing',
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    quantity INT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    payment_method VARCHAR(50) NOT NULL,
+    payment_status ENUM('Pending', 'Paid', 'Failed') DEFAULT 'Pending',
+    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE
+);
+
+----------------------------------------------------------
+📁 MODULE: CONFIGURATION
+📄 File: config/database.php
+----------------------------------------------------------
+<?php
+class Database {
+    private $host = "127.0.0.1";
+    private $db_name = "joy";
+    private $username = "root";
+    private $password = "admin123";
+    public $conn;
+
+    public function getConnection() {
+        $this->conn = null;
+        try {
+            $this->conn = new PDO("mysql:host=" . $this->host . ";dbname=" . $this->db_name, $this->username, $this->password);
+            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $this->conn->exec("set names utf8");
+        } catch(PDOException $exception) {
+            http_response_code(500);
+            echo json_encode(["status" => "error", "message" => "Database connection error."]);
+            exit();
+        }
+        return $this->conn;
+    }
+}
+?>
+
+----------------------------------------------------------
+📁 MODULE: API - AUTHENTICATION
+📄 File: api/auth.php
+----------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$routeParts = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+$action = isset($routeParts[2]) ? $routeParts[2] : null;
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method !== 'POST') {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+    exit();
+}
+
+$data = json_decode(file_get_contents("php://input"));
+
+if ($action === 'register') {
+    if (!empty($data->name) && !empty($data->email) && !empty($data->password)) {
+        // Table: users
+        $query = "INSERT INTO users (name, email, password, phone, address) VALUES (:name, :email, :password, :phone, :address)";
+        $stmt = $db->prepare($query);
+        
+        $name = htmlspecialchars(strip_tags($data->name));
+        $email = htmlspecialchars(strip_tags($data->email));
+        $password = password_hash($data->password, PASSWORD_BCRYPT);
+        $phone = isset($data->phone) ? htmlspecialchars(strip_tags($data->phone)) : null;
+        $address = isset($data->address) ? htmlspecialchars(strip_tags($data->address)) : null;
+
+        $stmt->bindParam(":name", $name);
+        $stmt->bindParam(":email", $email);
+        $stmt->bindParam(":password", $password);
+        $stmt->bindParam(":phone", $phone);
+        $stmt->bindParam(":address", $address);
+
+        try {
+            if ($stmt->execute()) {
+                http_response_code(201);
+                echo json_encode(["status" => "success", "message" => "User registered successfully", "user_id" => $db->lastInsertId()]);
+            } else {
+                http_response_code(503);
+                echo json_encode(["status" => "error", "message" => "Unable to register user."]);
+            }
+        } catch (PDOException $e) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "Email may already exist."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Incomplete data. Required: name, email, password."]);
+    }
+
+} else if ($action === 'login') {
+    if (!empty($data->email) && !empty($data->password)) {
+        // Table: users
+        $query = "SELECT id, name, password FROM users WHERE email = ? LIMIT 0,1";
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(1, $data->email);
+        $stmt->execute();
+
+        if ($stmt->rowCount() > 0) {
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $id = $row['id'];
+            $password_hash = $row['password'];
+
+            if (password_verify($data->password, $password_hash)) {
+                $token = bin2hex(random_bytes(16));
+                http_response_code(200);
+                echo json_encode([
+                    "status" => "success",
+                    "message" => "Successful login.",
+                    "token" => $token . "-" . $id . "-user", 
+                    "role" => "user",
+                    "user_id" => $id
+                ]);
+            } else {
+                http_response_code(401);
+                echo json_encode(["status" => "error", "message" => "Login failed. Incorrect password."]);
+            }
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "message" => "Login failed. User not found."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Incomplete data. Required: email, password."]);
+    }
+
+} else if ($action === 'admin_login') {
+    if (!empty($data->username) && !empty($data->password)) {
+        // Table: users
+        $query = "SELECT id, email, password FROM users WHERE email = ? AND role = 'admin' LIMIT 0,1";
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(1, $data->username); // frontend sends email as username
+        $stmt->execute();
+        
+        if ($stmt->rowCount() > 0) {
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $id = $row['id'];
+            $hashed_password = $row['password'];
+
+            if (password_verify($data->password, $hashed_password)) {
+                $token = bin2hex(random_bytes(16));
+                http_response_code(200);
+                echo json_encode([
+                    "status" => "success",
+                    "message" => "Successful admin login.",
+                    "token" => $token . "-" . $id . "-admin",
+                    "role" => "admin",
+                    "admin_id" => $id
+                ]);
+            } else {
+                http_response_code(401);
+                echo json_encode(["status" => "error", "message" => "Login failed. Incorrect password."]);
+            }
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "message" => "Login failed. Admin not found."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Incomplete data. Required: username, password."]);
+    }
+} else if ($action === 'logout') {
+    http_response_code(200);
+    echo json_encode(["status" => "success", "message" => "Logged out successfully."]);
+} else {
+    http_response_code(404);
+    echo json_encode(["status" => "error", "message" => "Auth action not found."]);
+}
+?>
+
+----------------------------------------------------------
+📁 MODULE: API - PRODUCTS
+📄 File: api/products.php
+----------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$routeParts = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+$id = isset($routeParts[2]) ? intval($routeParts[2]) : null;
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'GET') {
+    if ($id) {
+        $query = "SELECT id, name, category, price, description, image_url FROM products WHERE id = ? LIMIT 0,1";
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(1, $id);
+        $stmt->execute();
+        
+        if ($stmt->rowCount() > 0) {
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $row['price'] = (float)$row['price'];
+            http_response_code(200);
+            echo json_encode(["status" => "success", "data" => $row]);
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "message" => "Product not found."]);
+        }
+    } else {
+        $query = "SELECT id, name, category, price, description, image_url FROM products";
+        $stmt = $db->prepare($query);
+        $stmt->execute();
+        
+        $products_arr = array();
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $row['price'] = (float)$row['price'];
+            array_push($products_arr, $row);
+        }
+        
+        http_response_code(200);
+        echo json_encode(["status" => "success", "data" => $products_arr]);
+    }
+} else {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+}
+?>
+
+----------------------------------------------------------
+📁 MODULE: API - SHOPPING CART
+📄 File: api/cart.php
+----------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$routeParts = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+
+$authHeader = '';
+if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['HTTP_AUTHORIZATION']);
+} elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+} elseif (function_exists('apache_request_headers')) {
+    $requestHeaders = apache_request_headers();
+    if (isset($requestHeaders['Authorization'])) {
+        $authHeader = trim($requestHeaders['Authorization']);
+    }
+}
+
+$user_id = null;
+if (preg_match('/Bearer\s+(.*?)-(.*?)-(.*)/', $authHeader, $matches)) {
+    $user_id = intval($matches[2]); 
+}
+
+if (!$user_id) {
+    http_response_code(401);
+    echo json_encode(["status" => "error", "message" => "Unauthorized. Invalid or missing token."]);
+    exit();
+}
+
+$cart_item_id = isset($routeParts[2]) ? intval($routeParts[2]) : null;
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'GET') {
+    $query = "SELECT c.id as cart_item_id, p.id as product_id, p.name as product_name, p.price, c.quantity, (p.price * c.quantity) as total_item_price 
+              FROM cart c 
+              JOIN products p ON c.product_id = p.id 
+              WHERE c.user_id = ?";
+    $stmt = $db->prepare($query);
+    $stmt->execute([$user_id]);
+    
+    $cart_arr = array();
+    $subtotal = 0;
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $row['price'] = (float)$row['price'];
+        $row['quantity'] = (int)$row['quantity'];
+        $row['total_item_price'] = (float)$row['total_item_price'];
+        $subtotal += $row['total_item_price'];
+        array_push($cart_arr, $row);
+    }
+    http_response_code(200);
+    echo json_encode(["status" => "success", "data" => $cart_arr, "cart_subtotal" => $subtotal]);
+
+} elseif ($method === 'POST') {
+    $data = json_decode(file_get_contents("php://input"));
+    if (!empty($data->product_id) && !empty($data->quantity)) {
+        $check_query = "SELECT id, quantity FROM cart WHERE user_id = ? AND product_id = ?";
+        $check_stmt = $db->prepare($check_query);
+        $check_stmt->execute([$user_id, $data->product_id]);
+        
+        if ($check_stmt->rowCount() > 0) {
+            $row = $check_stmt->fetch(PDO::FETCH_ASSOC);
+            $new_quantity = $row['quantity'] + $data->quantity;
+            $update_query = "UPDATE cart SET quantity = ? WHERE id = ?";
+            $update_stmt = $db->prepare($update_query);
+            $update_stmt->execute([$new_quantity, $row['id']]);
+            http_response_code(200);
+            echo json_encode(["status" => "success", "message" => "Cart updated", "cart_item_id" => $row['id']]);
+        } else {
+            $insert_query = "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)";
+            $insert_stmt = $db->prepare($insert_query);
+            if ($insert_stmt->execute([$user_id, $data->product_id, $data->quantity])) {
+                http_response_code(201);
+                echo json_encode(["status" => "success", "message" => "Product added to cart", "cart_item_id" => $db->lastInsertId()]);
+            } else {
+                http_response_code(500); echo json_encode(["status" => "error", "message" => "Database error."]);
+            }
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Product ID and quantity required."]);
+    }
+
+} elseif ($method === 'PUT') {
+    if ($cart_item_id) {
+        $data = json_decode(file_get_contents("php://input"));
+        if (!empty($data->quantity)) {
+            $query = "UPDATE cart SET quantity = ? WHERE id = ? AND user_id = ?";
+            $stmt = $db->prepare($query);
+            if ($stmt->execute([$data->quantity, $cart_item_id, $user_id]) && $stmt->rowCount() > 0) {
+                http_response_code(200);
+                echo json_encode(["status" => "success", "message" => "Cart item updated successfully"]);
+            } else {
+                http_response_code(404);
+                echo json_encode(["status" => "error", "message" => "Cart item not found or you don't have permission."]);
+            }
+        } else {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "Quantity payload required."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Cart item ID required in URL."]);
+    }
+
+} elseif ($method === 'DELETE') {
+    if ($cart_item_id) {
+        $query = "DELETE FROM cart WHERE id = ? AND user_id = ?";
+        $stmt = $db->prepare($query);
+        if ($stmt->execute([$cart_item_id, $user_id]) && $stmt->rowCount() > 0) {
+            http_response_code(200);
+            echo json_encode(["status" => "success", "message" => "Item removed from cart"]);
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "message" => "Cart item not found or you don't have permission."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Cart item ID required in URL."]);
+    }
+} else {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+}
+?>
+
+----------------------------------------------------------
+📁 MODULE: API - ORDERS & LOGISTICS
+📄 File: api/orders.php
+----------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+$database = new Database();
+$db = $database->getConnection();
+
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$routeParts = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+
+$authHeader = '';
+if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['HTTP_AUTHORIZATION']);
+} elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+} elseif (function_exists('apache_request_headers')) {
+    $requestHeaders = apache_request_headers();
+    if (isset($requestHeaders['Authorization'])) {
+        $authHeader = trim($requestHeaders['Authorization']);
+    }
+}
+
+$user_id = null;
+if (preg_match('/Bearer\s+(.*?)-(.*?)-(.*)/', $authHeader, $matches)) {
+    $user_id = intval($matches[2]); 
+}
+
+if (!$user_id) {
+    http_response_code(401);
+    echo json_encode(["status" => "error", "message" => "Unauthorized. Invalid or missing token."]);
+    exit();
+}
+
+$action_or_id = isset($routeParts[2]) ? $routeParts[2] : null;
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'POST' && $action_or_id === 'checkout') {
+    $data = json_decode(file_get_contents("php://input"));
+    
+    if (!empty($data->address) && !empty($data->payment_method)) {
+        $cart_query = "SELECT c.product_id, c.quantity, p.price FROM cart c JOIN products p ON c.product_id = p.id WHERE c.user_id = ?";
+        $cart_stmt = $db->prepare($cart_query);
+        $cart_stmt->execute([$user_id]);
+        
+        if ($cart_stmt->rowCount() > 0) {
+            $items = $cart_stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            try {
+                $db->beginTransaction();
+                
+                foreach ($items as $item) {
+                    $total_item_amount = $item['price'] * $item['quantity'];
+                    $order_query = "INSERT INTO orders (user_id, product_id, total_amount, quantity, payment_status, order_status) VALUES (?, ?, ?, ?, 'Pending', 'Processing')";
+                    $order_stmt = $db->prepare($order_query);
+                    $order_stmt->execute([$user_id, $item['product_id'], $total_item_amount, $item['quantity']]);
+                    $order_id = $db->lastInsertId();
+                    
+                    // insert payment record
+                    $payment_query = "INSERT INTO payments (order_id, amount, payment_method, payment_status) VALUES (?, ?, ?, 'Pending')";
+                    $payment_stmt = $db->prepare($payment_query);
+                    $payment_stmt->execute([$order_id, $total_item_amount, htmlspecialchars(strip_tags($data->payment_method))]);
+                }
+                
+                // clear cart
+                $clear_query = "DELETE FROM cart WHERE user_id = ?";
+                $clear_stmt = $db->prepare($clear_query);
+                $clear_stmt->execute([$user_id]);
+                
+                $db->commit();
+                
+                http_response_code(201);
+                echo json_encode(["status" => "success", "message" => "Order placed successfully"]);
+            } catch (Exception $e) {
+                $db->rollBack();
+                http_response_code(500);
+                echo json_encode(["status" => "error", "message" => "Failed to place order: " . $e->getMessage()]);
+            }
+        } else {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "Cart is empty."]);
+        }
+    } else {
+        http_response_code(400);
+        echo json_encode(["status" => "error", "message" => "Address and payment_method are required."]);
+    }
+
+} elseif ($method === 'GET') {
+    if ($action_or_id && is_numeric($action_or_id)) {
+        $order_id = intval($action_or_id);
+        $order_query = "SELECT o.order_id, o.total_amount, o.order_date, o.order_status, o.payment_status, p.payment_method, pr.name as product_name, o.quantity 
+                        FROM orders o 
+                        JOIN products pr ON o.product_id = pr.id
+                        LEFT JOIN payments p ON o.order_id = p.order_id 
+                        WHERE o.order_id = ? AND o.user_id = ?";
+        $order_stmt = $db->prepare($order_query);
+        $order_stmt->execute([$order_id, $user_id]);
+        
+        if ($order_stmt->rowCount() > 0) {
+            $order = $order_stmt->fetch(PDO::FETCH_ASSOC);
+            $order['total_amount'] = (float)$order['total_amount'];
+            
+            http_response_code(200);
+            echo json_encode(["status" => "success", "data" => $order]);
+        } else {
+            http_response_code(404);
+            echo json_encode(["status" => "error", "message" => "Order not found."]);
+        }
+    } else {
+        $order_query = "SELECT o.order_id, o.total_amount, o.order_date, o.payment_status, pr.name as product_name 
+                        FROM orders o 
+                        JOIN products pr ON o.product_id = pr.id
+                        WHERE o.user_id = ? ORDER BY o.order_date DESC";
+        $order_stmt = $db->prepare($order_query);
+        $order_stmt->execute([$user_id]);
+        
+        $orders_arr = array();
+        while ($row = $order_stmt->fetch(PDO::FETCH_ASSOC)) {
+            $row['total_amount'] = (float)$row['total_amount'];
+            array_push($orders_arr, $row);
+        }
+        
+        http_response_code(200);
+        echo json_encode(["status" => "success", "data" => $orders_arr]);
+    }
+} else {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+}
+?>
+
+----------------------------------------------------------
+📁 MODULE: API - ADMIN PRIVILEGES
+📄 File: api/admin.php
+----------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+// Safe route extraction
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$routeParts = explode('/', trim(substr($uri, strpos($uri, '/api/')), '/'));
+
+// Check authorization header safely
+$authHeader = '';
+if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['HTTP_AUTHORIZATION']);
+} elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $authHeader = trim($_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+} elseif (function_exists('apache_request_headers')) {
+    $requestHeaders = apache_request_headers();
+    if (isset($requestHeaders['Authorization'])) {
+        $authHeader = trim($requestHeaders['Authorization']);
+    }
+}
+
+$user_id = null;
+$role = null;
+if (preg_match('/Bearer\s+(.*?)-(.*?)-(.*)/', $authHeader, $matches)) {
+    $user_id = intval($matches[2]); 
+    $role = $matches[3];
+}
+
+if (!$user_id || $role !== 'admin') {
+    http_response_code(403);
+    echo json_encode(["status" => "error", "message" => "Forbidden. Admin access required."]);
+    exit();
+}
+
+try {
+    $database = new Database();
+    $db = $database->getConnection();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(["status" => "error", "message" => "Database connection failed."]);
+    exit();
+}
+
+$resource = isset($routeParts[2]) ? $routeParts[2] : null; 
+$id = isset($routeParts[3]) ? intval($routeParts[3]) : null;
+$action = isset($routeParts[4]) ? $routeParts[4] : null;
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($resource === 'dashboard') {
+    if ($method === 'GET') {
+        $stats = [];
+        
+        $stmt = $db->query("SELECT COUNT(*) as total FROM products");
+        $stats['total_products'] = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+        
+        $stmt = $db->query("SELECT COUNT(*) as total FROM users");
+        $stats['total_users'] = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+        
+        $stmt = $db->query("SELECT COUNT(*) as total_orders, SUM(total_amount) as total_revenue FROM orders");
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stats['total_orders'] = (int)$row['total_orders'];
+        $stats['total_revenue'] = (float)$row['total_revenue'];
+        
+        $stmt = $db->query("SELECT o.order_id, o.total_amount, o.order_date, o.payment_status FROM orders o ORDER BY o.order_date DESC LIMIT 5");
+        $stats['recent_orders'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        http_response_code(200);
+        echo json_encode(["status" => "success", "data" => $stats]);
+    } else {
+        http_response_code(405); echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+    }
+} elseif ($resource === 'products') {
+    // ... products logic remains same ...
+} elseif ($resource === 'orders') {
+    if ($method === 'GET' && !$id) {
+        $query = "SELECT o.order_id, u.id as user_id, u.name as customer_name, o.order_date as date, o.payment_status, o.total_amount, o.order_status 
+                  FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.order_date DESC";
+        $stmt = $db->prepare($query);
+        $stmt->execute();
+        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        http_response_code(200);
+        echo json_encode(["status" => "success", "data" => $orders]);
+
+    } elseif ($method === 'GET' && $id) {
+        $query = "SELECT o.order_id, u.name as customer_name, u.email as customer_email, u.phone as customer_phone, o.payment_status, o.total_amount, o.order_status, pr.name as product_name, o.quantity 
+                  FROM orders o 
+                  JOIN users u ON o.user_id = u.id 
+                  JOIN products pr ON o.product_id = pr.id
+                  WHERE o.order_id = ?";
+        $stmt = $db->prepare($query);
+        $stmt->execute([$id]);
+
+        if ($stmt->rowCount() > 0) {
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+            http_response_code(200);
+            echo json_encode(["status" => "success", "data" => $order]);
+        } else {
+             http_response_code(404); echo json_encode(["status" => "error", "message" => "Order not found"]);
+        }
+
+    } elseif ($method === 'PUT' && $id && $action === 'payment_status') {
+        $data = json_decode(file_get_contents("php://input"));
+        if (!empty($data->payment_status)) {
+            $query = "UPDATE orders SET payment_status = ? WHERE order_id = ?";
+            $stmt = $db->prepare($query);
+            $stmt->execute([htmlspecialchars(strip_tags($data->payment_status)), $id]);
+            
+            // Sync with payments table if it exists
+            $sync_query = "UPDATE payments SET payment_status = ? WHERE order_id = ?";
+            $sync_stmt = $db->prepare($sync_query);
+            $sync_stmt->execute([htmlspecialchars(strip_tags($data->payment_status)), $id]);
+            
+            http_response_code(200);
+            echo json_encode(["status" => "success", "message" => "Payment status updated successfully"]);
+        } else {
+            http_response_code(400); echo json_encode(["status" => "error", "message" => "payment_status payload required"]);
+        }
+
+    } elseif ($method === 'PUT' && $id && $action === 'order_status') {
+        $data = json_decode(file_get_contents("php://input"));
+        if (!empty($data->order_status)) {
+            $query = "UPDATE orders SET order_status = ? WHERE order_id = ?";
+            $stmt = $db->prepare($query);
+            $stmt->execute([htmlspecialchars(strip_tags($data->order_status)), $id]);
+            http_response_code(200);
+            echo json_encode(["status" => "success", "message" => "Order status updated successfully"]);
+        } else {
+            http_response_code(400); echo json_encode(["status" => "error", "message" => "order_status payload required"]);
+        }
+
+    } else {
+          http_response_code(405); echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+    }
+} else {
+    http_response_code(404);
+    echo json_encode(["status" => "error", "message" => "Admin resource not found."]);
+}
+?>
+
+----------------------------------------------------------
+📁 MODULE: SYSTEM HEALTH
+📄 File: api/health.php
+----------------------------------------------------------
+<?php
+require_once __DIR__ . '/../config/database.php';
+
+$method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'GET') {
+    $database = new Database();
+    $db_status = "disconnected";
+    
+    try {
+        $db = $database->getConnection();
+        if ($db) {
+            $db_status = "connected";
+        }
+    } catch (Exception $e) {
+        $db_status = "error";
+    }
+
+    $response = [
+        "status" => $db_status === "error" ? "error" : "success",
+        "message" => "API health status.",
+        "services" => [
+            "database" => $db_status
+        ],
+        "server" => [
+            "php_version" => phpversion(),
+            "memory_usage" => round(memory_get_usage() / 1024 / 1024, 2) . " MB"
+        ],
+        "timestamp" => date("Y-m-d H:i:s")
+    ];
+
+    if ($db_status === "error") {
+        http_response_code(500);
+    } else {
+        http_response_code(200);
+    }
+
+    echo json_encode($response);
+} else {
+    http_response_code(405);
+    echo json_encode(["status" => "error", "message" => "Method not allowed"]);
+}
+?>

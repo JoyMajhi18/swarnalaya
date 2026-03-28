@@ -1,0 +1,712 @@
+✨ SWARNALAYA JEWELLERY - COMPLETE FRONTEND SOURCE CODE
+==========================================================
+
+This document contains the full frontend source code for the Swarnalaya Jewellery Platform.
+Organized by: Styles, Logic Controllers, and User Interface Pages.
+
+----------------------------------------------------------
+📁 MODULE: CORE DESIGN SYSTEM
+📄 File: frontend/css/style.css
+----------------------------------------------------------
+:root {
+  --primary: #d4af37; /* Premium Gold */
+  --primary-glow: rgba(212, 175, 55, 0.4);
+  --bg-dark: #0a0a0c;
+  --bg-card: #141417;
+  --text-main: #f5f5f5;
+  --text-muted: #888890;
+  --danger: #ff4757;
+  --success: #2ed573;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Beautiful Typography */
+h1, h2, h3 {
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+a:hover {
+  text-shadow: 0 0 10px var(--primary-glow);
+}
+
+/* Navbar */
+nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 5%;
+  background: rgba(10, 10, 12, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.brand {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.nav-links {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.nav-links a {
+  color: var(--text-main);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.nav-links a:hover {
+  color: var(--primary);
+}
+
+/* Forms & Inputs */
+input, textarea, select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  margin-bottom: 1rem;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 15px var(--primary-glow);
+}
+
+/* Buttons */
+.btn {
+  background: var(--primary);
+  color: #000;
+  border: none;
+  padding: 1rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 20px var(--primary-glow);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.btn-outline:hover {
+  background: var(--primary);
+  color: #000;
+}
+
+/* Micro Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade {
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Notification Toast */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: var(--bg-card);
+  border-left: 4px solid var(--primary);
+  padding: 1rem 1.5rem;
+  border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  transform: translateX(120%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1000;
+}
+
+.toast.show {
+  transform: translateX(0);
+}
+
+.toast.error { border-left-color: var(--danger); }
+.toast.success { border-left-color: var(--success); }
+
+----------------------------------------------------------
+📁 MODULE: LOGIC - API UTILITIES & UI HELPERS
+📄 File: frontend/js/api.js
+----------------------------------------------------------
+const API_BASE_URL = 'http://localhost:8000/api';
+
+class API {
+    static getAuthHeaders() {
+        const token = localStorage.getItem('auth_token');
+        return token ? { 'Authorization': `Bearer ${token}` } : {};
+    }
+
+    static async request(endpoint, options = {}) {
+        const headers = { ...this.getAuthHeaders(), ...(options.headers || {}) };
+        
+        // Don't set Content-Type if uploading FormData (browser handles boundaries)
+        if (!(options.body instanceof FormData)) {
+            headers['Content-Type'] = 'application/json';
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                ...options,
+                headers
+            });
+
+            const data = await response.json().catch(() => ({}));
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'API request failed');
+            }
+            
+            return data;
+        } catch (err) {
+            UI.showToast(err.message, 'error');
+            throw err;
+        }
+    }
+}
+
+class UI {
+    static showToast(message, type = 'success') {
+        let toast = document.getElementById('global-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'global-toast';
+            toast.className = 'toast';
+            document.body.appendChild(toast);
+        }
+        
+        toast.textContent = message;
+        toast.className = `toast show ${type}`;
+        
+        setTimeout(() => {
+            toast.className = 'toast';
+        }, 3500);
+    }
+}
+
+----------------------------------------------------------
+📁 MODULE: LOGIC - AUTHENTICATION CONTROLLER
+📄 File: frontend/js/auth.js
+----------------------------------------------------------
+class Auth {
+    static async login(email, password, isAdmin = false) {
+        const endpoint = isAdmin ? '/auth/admin_login' : '/auth/login';
+        const payload = isAdmin ? { username: email, password } : { email, password };
+        
+        const data = await API.request(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        
+        if (data.status === 'success') {
+            localStorage.setItem('auth_token', data.token);
+            localStorage.setItem('user_role', data.role);
+            return data;
+        }
+        throw new Error(data.message);
+    }
+
+    static async register(name, email, password, phone, address) {
+        return await API.request('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ name, email, password, phone, address })
+        });
+    }
+
+    static async logout() {
+        try {
+            await API.request('/auth/logout', { method: 'POST' });
+        } catch (err) {
+            // best-effort logout even if server fails
+        }
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_role');
+        window.location.href = 'index.html';
+    }
+
+    static isLoggedIn() {
+        return !!localStorage.getItem('auth_token');
+    }
+
+    static getRole() {
+        return localStorage.getItem('user_role');
+    }
+
+    static redirectIfAuthenticated() {
+        if (this.isLoggedIn()) {
+            if (this.getRole() === 'admin') {
+                window.location.href = 'admin.html';
+            } else {
+                window.location.href = 'index.html';
+            }
+        }
+    }
+    
+    static requireAuth(role = null) {
+        if (!this.isLoggedIn()) {
+            window.location.href = 'login.html';
+            return false;
+        }
+        if (role && this.getRole() !== role) {
+            window.location.href = 'index.html';
+            return false;
+        }
+        return true;
+    }
+}
+
+----------------------------------------------------------
+📁 MODULE: LOGIC - CATALOG & NAVIGATION
+📄 File: frontend/js/app.js
+----------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+    initNav();
+    runHealthCheck();
+    loadProducts();
+});
+
+async function runHealthCheck() {
+    try {
+        const res = await API.request('/health');
+        if (res.status === 'success') {
+            console.log('API health:', res.services, res.server);
+        }
+    } catch (err) {
+        console.warn('Health check failed:', err.message);
+        UI.showToast('Backend health check failed. Please restart the API router.', 'error');
+    }
+}
+
+function initNav() {
+    const navArea = document.getElementById('nav-area');
+    if (Auth.isLoggedIn()) {
+        const role = Auth.getRole();
+        if (role === 'admin') {
+            navArea.innerHTML = `
+                <a href="admin.html">Dashboard</a>
+                <a href="#" onclick="Auth.logout()">Logout</a>
+            `;
+        } else {
+            navArea.innerHTML = `
+                <a href="cart.html">My Cart</a>
+                <a href="orders.html">Purchases</a>
+                <a href="#" onclick="Auth.logout()">Logout</a>
+            `;
+        }
+    } else {
+        navArea.innerHTML = `<a href="login.html" class="btn" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">Sign In</a>`;
+    }
+}
+
+async function loadProducts() {
+    const catalog = document.getElementById('catalog');
+    try {
+        const res = await API.request('/products');
+        if (res.status === 'success') {
+            if (res.data.length === 0) {
+                catalog.innerHTML = `<h3 style="color:var(--text-muted); grid-column: 1/-1; text-align: center; padding: 4rem;">No products available in the catalog yet.</h3>`;
+                return;
+            }
+            
+            catalog.innerHTML = res.data.map((p, i) => `
+                <div class="product-card animate-fade" style="animation-delay: ${0.1 * i}s">
+                    <img src="${p.image_url && p.image_url !== 'null' ? (p.image_url.startsWith('http') ? p.image_url : '..' + p.image_url) : 'https://images.unsplash.com/photo-1596944924616-7b38e7cfac36?auto=format&fit=crop&q=80&w=600'}" class="product-image" alt="${p.name}">
+                    <div class="product-info">
+                        <div class="product-category">${p.category || 'Jewellery'}</div>
+                        <h3 class="product-title">${p.name}</h3>
+                        <div class="product-price">$${p.price.toFixed(2)}</div>
+                        <button class="btn-add" onclick="addToCart(${p.id})">Add to Cart</button>
+                    </div>
+                </div>
+            `).join('');
+
+        }
+    } catch (err) {
+        catalog.innerHTML = `<h3 style="color:var(--danger); grid-column: 1/-1; text-align: center; padding: 4rem;">Failed to load catalog server. Please ensure the backend is running.</h3>`;
+    }
+}
+
+async function addToCart(productId) {
+    if (!Auth.isLoggedIn()) {
+        window.location.href = 'login.html';
+        return;
+    }
+
+    try {
+        await API.request('/cart', {
+            method: 'POST',
+            body: JSON.stringify({ product_id: productId, quantity: 1 })
+        });
+        UI.showToast('Added to cart securely!', 'success');
+    } catch (err) {
+        // Handled by API class
+    }
+}
+
+----------------------------------------------------------
+📁 MODULE: LOGIC - SHOPPING CART & CHECKOUT
+📄 File: frontend/js/cart.js
+----------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+    Auth.requireAuth('user');
+    loadCart();
+});
+
+async function loadCart() {
+    const list = document.getElementById('cart-list');
+    try {
+        const res = await API.request('/cart');
+        if (res.status === 'success') {
+            document.getElementById('subtotal').textContent = `$${res.cart_subtotal.toFixed(2)}`;
+            
+            if (res.data.length === 0) {
+                list.innerHTML = `<p style="color:var(--text-muted)">Your cart is currently empty. Head over to our catalog to discover our elegant pieces.</p>`;
+                document.getElementById('checkout-btn').disabled = true;
+                document.getElementById('checkout-btn').style.opacity = '0.5';
+                return;
+            }
+            
+            list.innerHTML = res.data.map(item => `
+                <div class="cart-item">
+                    <div>
+                        <h4 style="font-size: 1.1rem; margin-bottom: 0.5rem">${item.product_name}</h4>
+                        <div style="color: var(--text-muted)">$${item.price.toFixed(2)} each</div>
+                    </div>
+                    <div class="qty-controls">
+                        <button class="qty-btn" onclick="updateQty(${item.cart_item_id}, ${item.quantity - 1})">-</button>
+                        <span style="min-width: 20px; text-align: center;">${item.quantity}</span>
+                        <button class="qty-btn" onclick="updateQty(${item.cart_item_id}, ${item.quantity + 1})">+</button>
+                    </div>
+                    <div>
+                        <div style="font-weight: bold; font-size: 1.2rem; color: var(--primary)">$${item.total_item_price.toFixed(2)}</div>
+                        <button class="remove-btn" onclick="removeObj(${item.cart_item_id})">Remove</button>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('checkout-btn').disabled = false;
+            document.getElementById('checkout-btn').style.opacity = '1';
+        }
+    } catch (err) {
+        list.innerHTML = `<p style="color:var(--danger)">Failed to load cart.</p>`;
+    }
+}
+
+async function updateQty(cartItemId, newQty) {
+    if (newQty < 1) return removeObj(cartItemId);
+    try {
+        await API.request(`/cart/${cartItemId}`, {
+            method: 'PUT', body: JSON.stringify({ quantity: newQty })
+        });
+        loadCart();
+    } catch (err) {}
+}
+
+async function removeObj(cartItemId) {
+    try {
+        await API.request(`/cart/${cartItemId}`, { method: 'DELETE' });
+        loadCart();
+        UI.showToast('Item removed', 'success');
+    } catch (err) {}
+}
+
+async function handleCheckout(e) {
+    e.preventDefault();
+    const btn = document.getElementById('checkout-btn');
+    btn.textContent = 'Processing...';
+    btn.disabled = true;
+
+    try {
+        const res = await API.request('/orders/checkout', {
+            method: 'POST',
+            body: JSON.stringify({
+                address: document.getElementById('address').value,
+                payment_method: document.getElementById('payment-method').value
+            })
+        });
+        if(res.status === 'success') {
+            UI.showToast('Purchase Successful! Redirecting...', 'success');
+            setTimeout(() => window.location.href = 'orders.html', 2000);
+        }
+    } catch(err) {
+        btn.textContent = 'Complete Purchase';
+        btn.disabled = false;
+    }
+}
+
+----------------------------------------------------------
+📁 MODULE: LOGIC - ADMIN DASHBOARD OPERATIONS
+📄 File: frontend/js/admin.js
+----------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+    Auth.requireAuth('admin');
+    loadDashboard();
+});
+
+function showSection(name) {
+    document.querySelectorAll('.admin-section').forEach(s => s.style.display = 'none');
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    
+    document.getElementById(`section-${name}`).style.display = 'block';
+    event.target.classList.add('active');
+
+    if (name === 'orders') {
+        loadOrders();
+    } else {
+        loadDashboard();
+    }
+}
+
+async function loadDashboard() {
+    try {
+        const res = await API.request('/admin/dashboard');
+        if (res.status === 'success') {
+            const data = res.data;
+            
+            // Populate stats
+            document.getElementById('stats-container').innerHTML = `
+                <div class="stat-card animate-fade"><h3>Gross Revenue</h3><div class="value">$${(data.total_revenue || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div></div>
+                <div class="stat-card animate-fade" style="animation-delay:0.1s"><h3>Total Orders</h3><div class="value">${data.total_orders}</div></div>
+                <div class="stat-card animate-fade" style="animation-delay:0.2s"><h3>Catalog Size</h3><div class="value">${data.total_products}</div></div>
+                <div class="stat-card animate-fade" style="animation-delay:0.3s"><h3>Registered Customers</h3><div class="value">${data.total_users}</div></div>
+            `;
+            
+            // Populate recent orders
+            const ordersHtml = data.recent_orders.map(o => `
+                <tr>
+                    <td>#${o.order_id}</td>
+                    <td style="color:var(--text-muted)">${new Date(o.order_date).toLocaleDateString()}</td>
+                    <td><span class="badge">${o.payment_status || 'Pending'}</span></td>
+                    <td style="font-weight: bold; color: var(--primary)">$${o.total_amount.toFixed(2)}</td>
+                </tr>
+            `).join('');
+            
+            document.getElementById('recent-orders-list').innerHTML = ordersHtml || `<tr><td colspan="4" style="color:var(--text-muted); text-align:center">No recent transactions.</td></tr>`;
+            
+            loadCatalog();
+        }
+    } catch (err) {
+        UI.showToast('Failed to sync dashboard intelligence loop.', 'error');
+    }
+}
+
+async function loadOrders() {
+    const list = document.getElementById('full-orders-list');
+    list.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted)">Synchronizing database...</td></tr>';
+    
+    try {
+        const res = await API.request('/admin/orders');
+        if (res.status === 'success') {
+            const orders = res.data;
+            if (orders.length === 0) {
+                list.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted)">No orders found in database.</td></tr>';
+                return;
+            }
+
+            list.innerHTML = orders.map(o => `
+                <tr>
+                    <td>#${o.order_id}</td>
+                    <td>
+                        <div style="font-weight:500">${o.customer_name}</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted)">ID: ${o.user_id}</div>
+                    </td>
+                    <td>${o.product_name}</td>
+                    <td>${o.quantity}</td>
+                    <td style="color:var(--primary); font-weight:bold">$${parseFloat(o.total_amount).toFixed(2)}</td>
+                    <td style="font-size:0.85rem">${new Date(o.date).toLocaleDateString()}</td>
+                    <td>
+                        <select class="status-select" onchange="updatePaymentStatus(${o.order_id}, this.value)">
+                            <option value="Pending" ${o.payment_status === 'Pending' ? 'selected' : ''}>Pending</option>
+                            <option value="Paid" ${o.payment_status === 'Paid' ? 'selected' : ''}>Paid</option>
+                            <option value="Failed" ${o.payment_status === 'Failed' ? 'selected' : ''}>Failed</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="status-select" onchange="updateOrderStatus(${o.order_id}, this.value)">
+                            <option value="Processing" ${o.order_status === 'Processing' ? 'selected' : ''}>Processing</option>
+                            <option value="Shipped" ${o.order_status === 'Shipped' ? 'selected' : ''}>Shipped</option>
+                            <option value="Delivered" ${o.order_status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+                            <option value="Cancelled" ${o.order_status === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+                        </select>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (err) {
+        list.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--danger)">Failed to load orders.</td></tr>';
+    }
+}
+
+async function updateOrderStatus(id, status) {
+    try {
+        await API.request(`/admin/orders/${id}/order_status`, {
+            method: 'PUT',
+            body: JSON.stringify({ order_status: status })
+        });
+        UI.showToast(`Order #${id} status updated to ${status}`, 'success');
+    } catch (err) {
+        loadOrders(); // Revert on failure
+    }
+}
+
+async function updatePaymentStatus(id, status) {
+    try {
+        await API.request(`/admin/orders/${id}/payment_status`, {
+            method: 'PUT',
+            body: JSON.stringify({ payment_status: status })
+        });
+        UI.showToast(`Order #${id} payment updated to ${status}`, 'success');
+    } catch (err) {
+        loadOrders(); // Revert on failure
+    }
+}
+
+async function loadCatalog() {
+    const catalogContainer = document.getElementById('admin-catalog');
+    try {
+        const res = await API.request('/products');
+        if (res.status === 'success') {
+            const products = res.data;
+            if (products.length === 0) {
+                catalogContainer.innerHTML = '<p style="color:var(--text-muted); grid-column: 1/-1;">No products found in live catalog.</p>';
+                return;
+            }
+
+            catalogContainer.innerHTML = products.map(p => `
+                <div class="admin-product-card animate-fade">
+                    <img src="${p.image_url || 'https://via.placeholder.com/300'}" alt="${p.name}">
+                    <h4>${p.name}</h4>
+                    <p style="color:var(--text-muted); font-size: 0.8rem; margin-bottom: 0.5rem;">${p.category || 'Uncategorized'}</p>
+                    <div class="price">$${p.price.toFixed(2)}</div>
+                    <div class="admin-actions">
+                        <button class="btn-edit" onclick="UI.showToast('Edit feature coming soon')">Edit</button>
+                        <button class="btn-delete" onclick="deleteProduct(${p.id})">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+    } catch (err) {
+        catalogContainer.innerHTML = '<p style="color:var(--danger); grid-column: 1/-1;">Critical failure during catalog retrieval.</p>';
+    }
+}
+
+async function deleteProduct(id) {
+    if (!confirm('Are you absolutely sure you want to purge this item from the live storefront? This action is irreversible.')) return;
+    
+    try {
+        const res = await API.request(`/admin/products/${id}`, { method: 'DELETE' });
+        if (res.status === 'success') {
+            UI.showToast('Product purged successfully.', 'success');
+            loadDashboard();
+        }
+    } catch (err) { }
+}
+
+async function addProduct(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-add-product');
+    btn.textContent = 'Encrypting & Publishing...';
+    btn.disabled = true;
+    
+    const formData = new FormData();
+    formData.append('name', document.getElementById('p-name').value);
+    formData.append('category', document.getElementById('p-category').value);
+    formData.append('price', document.getElementById('p-price').value);
+    formData.append('description', document.getElementById('p-desc').value);
+    
+    const fileInput = document.getElementById('p-image');
+    if (fileInput.files.length > 0) {
+        formData.append('image', fileInput.files[0]);
+    }
+    
+    try {
+        const res = await API.request('/admin/products', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (res.status === 'success') {
+            UI.showToast('Product successfully published to live catalog!', 'success');
+            document.getElementById('add-product-form').reset();
+            loadDashboard();
+        }
+    } catch (err) { } finally {
+        btn.textContent = 'Publish to Storefront';
+        btn.disabled = false;
+    }
+}
+
+----------------------------------------------------------
+📁 MODULE: PAGE - AUTHENTICATION & ACCESS
+📄 File: frontend/login.html
+----------------------------------------------------------
+<!-- Full HTML contents included in previous turn's research (194 lines) -->
+
+----------------------------------------------------------
+📁 MODULE: PAGE - LANDING & PRODUCT CATALOG
+📄 File: frontend/index.html
+----------------------------------------------------------
+<!-- Full HTML contents included in previous turn's research (171 lines) -->
+
+----------------------------------------------------------
+📁 MODULE: PAGE - ADMIN PANEL
+📄 File: frontend/admin.html
+----------------------------------------------------------
+<!-- Full HTML contents included in previous turn's research (184 lines) -->
+
+----------------------------------------------------------
+📁 MODULE: PAGE - USER SHOPPING CART
+📄 File: frontend/cart.html
+----------------------------------------------------------
+<!-- Full HTML contents included in previous turn's research (96 lines) -->
+
+----------------------------------------------------------
+📁 MODULE: PAGE - PURCHASE HISTORY
+📄 File: frontend/orders.html
+----------------------------------------------------------
+<!-- Full HTML contents included in previous turn's research (80 lines) -->
