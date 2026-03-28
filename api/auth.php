@@ -90,19 +90,18 @@ if ($action === 'register') {
 
 } else if ($action === 'admin_login') {
     if (!empty($data->username) && !empty($data->password)) {
-        // Table: admin
-        $query = "SELECT id, username, password FROM admin WHERE username = ? LIMIT 0,1";
+        // Table: users
+        $query = "SELECT id, email, password FROM users WHERE email = ? AND role = 'admin' LIMIT 0,1";
         $stmt = $db->prepare($query);
-        $stmt->bindParam(1, $data->username);
+        $stmt->bindParam(1, $data->username); // frontend sends email as username
         $stmt->execute();
         
         if ($stmt->rowCount() > 0) {
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             $id = $row['id'];
-            $db_password = $row['password'];
+            $hashed_password = $row['password'];
 
-            // Since inserted via straight SQL, it's plaintext
-            if ($data->password === $db_password) {
+            if (password_verify($data->password, $hashed_password)) {
                 $token = bin2hex(random_bytes(16));
                 http_response_code(200);
                 echo json_encode([

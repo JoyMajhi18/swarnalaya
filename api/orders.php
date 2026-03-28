@@ -42,33 +42,23 @@ if ($method === 'POST' && $action_or_id === 'checkout') {
         $cart_stmt->execute([$user_id]);
         
         if ($cart_stmt->rowCount() > 0) {
-            $total_amount = 0;
-            $items = array();
-            while ($row = $cart_stmt->fetch(PDO::FETCH_ASSOC)) {
-                $items[] = $row;
-                $total_amount += ($row['price'] * $row['quantity']);
-            }
+            $items = $cart_stmt->fetchAll(PDO::FETCH_ASSOC);
             
             try {
                 $db->beginTransaction();
                 
-                // insert order
-                $order_query = "INSERT INTO orders (user_id, total_amount, address) VALUES (?, ?, ?)";
-                $order_stmt = $db->prepare($order_query);
-                $order_stmt->execute([$user_id, $total_amount, htmlspecialchars(strip_tags($data->address))]);
-                $order_id = $db->lastInsertId();
-                
-                // insert items
                 foreach ($items as $item) {
-                    $item_query = "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)";
-                    $item_stmt = $db->prepare($item_query);
-                    $item_stmt->execute([$order_id, $item['product_id'], $item['quantity'], $item['price']]);
+                    $total_item_amount = $item['price'] * $item['quantity'];
+                    $order_query = "INSERT INTO orders (user_id, product_id, total_amount, quantity, payment_status, order_status) VALUES (?, ?, ?, ?, 'Pending', 'Processing')";
+                    $order_stmt = $db->prepare($order_query);
+                    $order_stmt->execute([$user_id, $item['product_id'], $total_item_amount, $item['quantity']]);
+                    $order_id = $db->lastInsertId();
+                    
+                    // insert payment record
+                    $payment_query = "INSERT INTO payments (order_id, amount, payment_method, payment_status) VALUES (?, ?, ?, 'Pending')";
+                    $payment_stmt = $db->prepare($payment_query);
+                    $payment_stmt->execute([$order_id, $total_item_amount, htmlspecialchars(strip_tags($data->payment_method))]);
                 }
-                
-                // insert payment
-                $payment_query = "INSERT INTO payments (order_id, amount, payment_method, payment_status) VALUES (?, ?, ?, 'Pending')";
-                $payment_stmt = $db->prepare($payment_query);
-                $payment_stmt->execute([$order_id, $total_amount, htmlspecialchars(strip_tags($data->payment_method))]);
                 
                 // clear cart
                 $clear_query = "DELETE FROM cart WHERE user_id = ?";
@@ -78,11 +68,11 @@ if ($method === 'POST' && $action_or_id === 'checkout') {
                 $db->commit();
                 
                 http_response_code(201);
-                echo json_encode(["status" => "success", "message" => "Order placed successfully", "order_id" => (int)$order_id]);
+                echo json_encode(["status" => "success", "message" => "Order placed successfully"]);
             } catch (Exception $e) {
                 $db->rollBack();
                 http_response_code(500);
-                echo json_encode(["status" => "error", "message" => "Failed to place order."]);
+                echo json_encode(["status" => "error", "message" => "Failed to place order: " . $e->getMessage()]);
             }
         } else {
             http_response_code(400);
@@ -96,21 +86,17 @@ if ($method === 'POST' && $action_or_id === 'checkout') {
 } elseif ($method === 'GET') {
     if ($action_or_id && is_numeric($action_or_id)) {
         $order_id = intval($action_or_id);
-        $order_query = "SELECT o.id as order_id, o.address, o.total_amount, o.created_at as order_date, p.payment_method, p.payment_status 
-                        FROM orders o LEFT JOIN payments p ON o.id = p.order_id 
-                        WHERE o.id = ? AND o.user_id = ?";
+        $order_query = "SELECT o.order_id, o.total_amount, o.order_date, o.order_status, o.payment_status, p.payment_method, pr.name as product_name, o.quantity 
+                        FROM orders o 
+                        JOIN products pr ON o.product_id = pr.id
+                        LEFT JOIN payments p ON o.order_id = p.order_id 
+                        WHERE o.order_id = ? AND o.user_id = ?";
         $order_stmt = $db->prepare($order_query);
         $order_stmt->execute([$order_id, $user_id]);
         
         if ($order_stmt->rowCount() > 0) {
             $order = $order_stmt->fetch(PDO::FETCH_ASSOC);
             $order['total_amount'] = (float)$order['total_amount'];
-            
-            $items_query = "SELECT oi.product_id, p.name as product_name, oi.quantity, oi.price FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?";
-            $items_stmt = $db->prepare($items_query);
-            $items_stmt->execute([$order_id]);
-            
-            $order['items'] = $items_stmt->fetchAll(PDO::FETCH_ASSOC);
             
             http_response_code(200);
             echo json_encode(["status" => "success", "data" => $order]);
@@ -119,9 +105,10 @@ if ($method === 'POST' && $action_or_id === 'checkout') {
             echo json_encode(["status" => "error", "message" => "Order not found."]);
         }
     } else {
-        $order_query = "SELECT o.id as order_id, o.total_amount, o.created_at as order_date, p.payment_status 
-                        FROM orders o LEFT JOIN payments p ON o.id = p.order_id 
-                        WHERE o.user_id = ? ORDER BY o.created_at DESC";
+        $order_query = "SELECT o.order_id, o.total_amount, o.order_date, o.payment_status, pr.name as product_name 
+                        FROM orders o 
+                        JOIN products pr ON o.product_id = pr.id
+                        WHERE o.user_id = ? ORDER BY o.order_date DESC";
         $order_stmt = $db->prepare($order_query);
         $order_stmt->execute([$user_id]);
         
@@ -138,4 +125,5 @@ if ($method === 'POST' && $action_or_id === 'checkout') {
     http_response_code(405);
     echo json_encode(["status" => "error", "message" => "Method not allowed"]);
 }
+
 ?>

@@ -57,6 +57,19 @@
         .admin-actions button { flex: 1; padding: 0.5rem; font-size: 0.75rem; cursor: pointer; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: var(--text-muted); transition: all 0.2s; }
         .admin-actions .btn-delete:hover { background: var(--danger); color: white; border-color: var(--danger); }
         .admin-actions .btn-edit:hover { background: var(--primary); color: black; border-color: var(--primary); }
+        
+        /* Order Management Styles */
+        .status-select { 
+            background: #1a1a1d; 
+            color: var(--text-main); 
+            border: 1px solid rgba(255,255,255,0.1); 
+            border-radius: 4px; 
+            padding: 0.3rem; 
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .status-select:focus { border-color: var(--primary); outline: none; }
+        .order-detail-row { background: rgba(212,175,55,0.02); }
     </style>
 </head>
 <body>
@@ -64,67 +77,96 @@
         <div class="sidebar">
             <h2 class="animate-fade">SWARNALAYA. ADMIN</h2>
             <div class="animate-fade" style="animation-delay: 0.1s; display: flex; flex-direction: column; flex: 1;">
-                <a href="#" class="active">Overview Dashboard</a>
-                <a href="#" onclick="UI.showToast('Full catalog manager coming soon')">Manage Catalog</a>
-                <a href="#" onclick="UI.showToast('Full orders tracking coming soon')">Track Orders</a>
-                <a href="#" onclick="UI.showToast('Customer accounts coming soon')">Customer Data</a>
+                <a href="#" class="nav-link active" onclick="showSection('overview')">Overview Dashboard</a>
+                <a href="#" class="nav-link" onclick="showSection('orders')">Track Orders</a>
+                <a href="#" class="nav-link" onclick="UI.showToast('Customer accounts coming soon')">Customer Data</a>
                 <a href="#" onclick="Auth.logout()" style="margin-top: auto; color: var(--danger)">Sign Out & Lock</a>
             </div>
         </div>
         
         <div class="main-content animate-fade" style="animation-delay: 0.2s;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                <h1>Dashboard Overview</h1>
-                <a href="index.html" target="_blank" class="btn btn-outline" style="width: auto; padding: 0.6rem 1.5rem; font-size: 0.9rem;">View Public Store</a>
-            </div>
-            
-            <div class="stats-grid" id="stats-container">
-                <!-- Injected via JS -->
-                <div class="stat-card"><h3>Loading</h3><div class="value">...</div></div>
-            </div>
-            
-            <div class="content-grid">
-                <div class="panel">
-                    <h2 class="panel-header">Publish New Product</h2>
-                    <form id="add-product-form" onsubmit="addProduct(event)">
-                        <input type="text" id="p-name" placeholder="Product Title (e.g., Diamond Cuff)" required>
-                        <input type="text" id="p-category" placeholder="Category (e.g., Rings, Necklaces)" required>
-                        <input type="number" id="p-price" step="0.01" placeholder="Selling Price ($)" required>
-                        <textarea id="p-desc" placeholder="Exquisite description details..." rows="3"></textarea>
-                        
-                        <label style="color:var(--text-muted); font-size:0.9rem; margin-bottom:0.8rem; display:block;">Cover Media Image (Optional)</label>
-                        <input type="file" id="p-image" accept="image/*" style="padding: 0.8rem; background: rgba(0,0,0,0.2);">
-                        
-                        <button type="submit" class="btn" style="margin-top: 1rem" id="btn-add-product">Publish to Storefront</button>
-                    </form>
+            <!-- OVERVIEW SECTION -->
+            <div id="section-overview" class="admin-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h1>Dashboard Overview</h1>
+                    <a href="index.html" target="_blank" class="btn btn-outline" style="width: auto; padding: 0.6rem 1.5rem; font-size: 0.9rem;">View Public Store</a>
                 </div>
                 
+                <div class="stats-grid" id="stats-container">
+                    <div class="stat-card"><h3>Loading</h3><div class="value">...</div></div>
+                </div>
+                
+                <div class="content-grid">
+                    <div class="panel">
+                        <h2 class="panel-header">Publish New Product</h2>
+                        <form id="add-product-form" onsubmit="addProduct(event)">
+                            <input type="text" id="p-name" placeholder="Product Title (e.g., Diamond Cuff)" required>
+                            <input type="text" id="p-category" placeholder="Category (e.g., Rings, Necklaces)" required>
+                            <input type="number" id="p-price" step="0.01" placeholder="Selling Price ($)" required>
+                            <textarea id="p-desc" placeholder="Exquisite description details..." rows="3"></textarea>
+                            
+                            <label style="color:var(--text-muted); font-size:0.9rem; margin-bottom:0.8rem; display:block;">Cover Media Image (Optional)</label>
+                            <input type="file" id="p-image" accept="image/*" style="padding: 0.8rem; background: rgba(0,0,0,0.2);">
+                            
+                            <button type="submit" class="btn" style="margin-top: 1rem" id="btn-add-product">Publish to Storefront</button>
+                        </form>
+                    </div>
+                    
+                    <div class="panel">
+                        <h2 class="panel-header">Recent Transactions</h2>
+                        <div style="overflow-x: auto;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ref</th>
+                                        <th>Date</th>
+                                        <th>Payment</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-orders-list">
+                                    <tr><td colspan="4" style="text-align:center; color:var(--text-muted)">Synchronizing logs...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" style="margin-top: 2rem;">
+                    <h2 class="panel-header">Active Storefront Catalog</h2>
+                    <div class="admin-product-grid" id="admin-catalog">
+                        <div class="stat-card"><h3>Connecting to database...</h3></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ORDERS SECTION -->
+            <div id="section-orders" class="admin-section" style="display:none">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h1>Order Tracking & Logistics</h1>
+                    <button class="btn btn-outline" onclick="loadOrders()" style="width: auto; padding: 0.6rem 1.5rem; font-size: 0.9rem;">Refresh List</button>
+                </div>
+
                 <div class="panel">
-                    <h2 class="panel-header">Recent Transactions</h2>
                     <div style="overflow-x: auto;">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Ref ID</th>
+                                    <th>Customer</th>
+                                    <th>Product</th>
+                                    <th>Qty</th>
+                                    <th>Total</th>
                                     <th>Date</th>
-                                    <th>Status</th>
-                                    <th>Value</th>
+                                    <th>Payment Status</th>
+                                    <th>Fulfillment Status</th>
                                 </tr>
                             </thead>
-                            <tbody id="recent-orders-list">
-                                <tr><td colspan="4" style="text-align:center; color:var(--text-muted)">Synchronizing logs...</td></tr>
+                            <tbody id="full-orders-list">
+                                <tr><td colspan="8" style="text-align:center; color:var(--text-muted)">Loading master transaction list...</td></tr>
                             </tbody>
                         </table>
                     </div>
-                </div>
-            </div>
-
-            <!-- New Catalog Management Panel -->
-            <div class="panel" style="margin-top: 2rem;">
-                <h2 class="panel-header">Active Storefront Catalog</h2>
-                <div class="admin-product-grid" id="admin-catalog">
-                    <!-- Injected via JS -->
-                    <div class="stat-card"><h3>Connecting to database...</h3></div>
                 </div>
             </div>
         </div>

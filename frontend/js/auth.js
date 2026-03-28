@@ -44,7 +44,11 @@ class Auth {
 
     static redirectIfAuthenticated() {
         if (this.isLoggedIn()) {
-            window.location.href = 'index.html';
+            if (this.getRole() === 'admin') {
+                window.location.href = 'admin.html';
+            } else {
+                window.location.href = 'index.html';
+            }
         }
     }
     

@@ -140,13 +140,19 @@
             btn.textContent = 'Authenticating...';
             
             try {
-                if (isAdmin) {
-                    await Auth.login(document.getElementById('admin-username').value, document.getElementById('admin-password').value, true);
-                    window.location.href = 'index.html';
-                } else {
-                    await Auth.login(document.getElementById('login-email').value, document.getElementById('login-password').value, false);
-                    window.location.href = 'index.html';
-                }
+                const user = await Auth.login(document.getElementById(isAdmin ? 'admin-username' : 'login-email').value, document.getElementById(isAdmin ? 'admin-password' : 'login-password').value, isAdmin);
+                
+                // Success feedback
+                btn.textContent = 'Success! Redirecting...';
+                
+                // Small delay to let the user see the success state
+                setTimeout(() => {
+                    if (isAdmin) {
+                        window.location.href = 'admin.html';
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                }, 600);
             } catch (err) {
                 btn.textContent = originalText;
                 UI.showToast(err.message, 'error');

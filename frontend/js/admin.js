@@ -3,6 +3,20 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDashboard();
 });
 
+function showSection(name) {
+    document.querySelectorAll('.admin-section').forEach(s => s.style.display = 'none');
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    
+    document.getElementById(`section-${name}`).style.display = 'block';
+    event.target.classList.add('active');
+
+    if (name === 'orders') {
+        loadOrders();
+    } else {
+        loadDashboard();
+    }
+}
+
 async function loadDashboard() {
     try {
         const res = await API.request('/admin/dashboard');
@@ -20,20 +34,90 @@ async function loadDashboard() {
             // Populate recent orders
             const ordersHtml = data.recent_orders.map(o => `
                 <tr>
-                    <td>#${o.id}</td>
+                    <td>#${o.order_id}</td>
                     <td style="color:var(--text-muted)">${new Date(o.order_date).toLocaleDateString()}</td>
                     <td><span class="badge">${o.payment_status || 'Pending'}</span></td>
                     <td style="font-weight: bold; color: var(--primary)">$${o.total_amount.toFixed(2)}</td>
                 </tr>
             `).join('');
             
-            document.getElementById('recent-orders-list').innerHTML = ordersHtml || `<tr><td colspan="4" style="color:var(--text-muted)">No recent transactions recorded.</td></tr>`;
+            document.getElementById('recent-orders-list').innerHTML = ordersHtml || `<tr><td colspan="4" style="color:var(--text-muted); text-align:center">No recent transactions.</td></tr>`;
             
-            // Load catalog items into the 4-column grid
             loadCatalog();
         }
     } catch (err) {
         UI.showToast('Failed to sync dashboard intelligence loop.', 'error');
+    }
+}
+
+async function loadOrders() {
+    const list = document.getElementById('full-orders-list');
+    list.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted)">Synchronizing database...</td></tr>';
+    
+    try {
+        const res = await API.request('/admin/orders');
+        if (res.status === 'success') {
+            const orders = res.data;
+            if (orders.length === 0) {
+                list.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted)">No orders found in database.</td></tr>';
+                return;
+            }
+
+            list.innerHTML = orders.map(o => `
+                <tr>
+                    <td>#${o.order_id}</td>
+                    <td>
+                        <div style="font-weight:500">${o.customer_name}</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted)">ID: ${o.user_id}</div>
+                    </td>
+                    <td>${o.product_name}</td>
+                    <td>${o.quantity}</td>
+                    <td style="color:var(--primary); font-weight:bold">$${parseFloat(o.total_amount).toFixed(2)}</td>
+                    <td style="font-size:0.85rem">${new Date(o.date).toLocaleDateString()}</td>
+                    <td>
+                        <select class="status-select" onchange="updatePaymentStatus(${o.order_id}, this.value)">
+                            <option value="Pending" ${o.payment_status === 'Pending' ? 'selected' : ''}>Pending</option>
+                            <option value="Paid" ${o.payment_status === 'Paid' ? 'selected' : ''}>Paid</option>
+                            <option value="Failed" ${o.payment_status === 'Failed' ? 'selected' : ''}>Failed</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="status-select" onchange="updateOrderStatus(${o.order_id}, this.value)">
+                            <option value="Processing" ${o.order_status === 'Processing' ? 'selected' : ''}>Processing</option>
+                            <option value="Shipped" ${o.order_status === 'Shipped' ? 'selected' : ''}>Shipped</option>
+                            <option value="Delivered" ${o.order_status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+                            <option value="Cancelled" ${o.order_status === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+                        </select>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    } catch (err) {
+        list.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--danger)">Failed to load orders.</td></tr>';
+    }
+}
+
+async function updateOrderStatus(id, status) {
+    try {
+        await API.request(`/admin/orders/${id}/order_status`, {
+            method: 'PUT',
+            body: JSON.stringify({ order_status: status })
+        });
+        UI.showToast(`Order #${id} status updated to ${status}`, 'success');
+    } catch (err) {
+        loadOrders(); // Revert on failure
+    }
+}
+
+async function updatePaymentStatus(id, status) {
+    try {
+        await API.request(`/admin/orders/${id}/payment_status`, {
+            method: 'PUT',
+            body: JSON.stringify({ payment_status: status })
+        });
+        UI.showToast(`Order #${id} payment updated to ${status}`, 'success');
+    } catch (err) {
+        loadOrders(); // Revert on failure
     }
 }
 
@@ -73,11 +157,9 @@ async function deleteProduct(id) {
         const res = await API.request(`/admin/products/${id}`, { method: 'DELETE' });
         if (res.status === 'success') {
             UI.showToast('Product purged successfully.', 'success');
-            loadDashboard(); // Refresh stats and catalog
+            loadDashboard();
         }
-    } catch (err) {
-        // Error toast handled by API helper
-    }
+    } catch (err) { }
 }
 
 async function addProduct(e) {
@@ -100,17 +182,15 @@ async function addProduct(e) {
     try {
         const res = await API.request('/admin/products', {
             method: 'POST',
-            body: formData // API limits setting Content-Type magically for FormData payload boundary
+            body: formData
         });
         
         if (res.status === 'success') {
             UI.showToast('Product successfully published to live catalog!', 'success');
             document.getElementById('add-product-form').reset();
-            loadDashboard(); // Resync stats to show +1 active product
+            loadDashboard();
         }
-    } catch (err) {
-        // UI toast thrown implicitly
-    } finally {
+    } catch (err) { } finally {
         btn.textContent = 'Publish to Storefront';
         btn.disabled = false;
     }
